@@ -1,1 +1,19 @@
 .private
+
+# ビルド成果物
+dist/
+build/
+*.egg-info/
+
+# Pythonキャッシュ
+__pycache__/
+*.py[cod]
+*.so
+
+# 仮想環境
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
