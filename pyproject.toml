@@ -30,6 +30,9 @@ dev = [
 [project.scripts]
 manga-gen = "manga_gen.cli:main"
 
+[tool.setuptools.package-data]
+manga_gen = ["*.lark"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"
