@@ -1,0 +1,18 @@
+// Example with embedded image
+
+page {
+  gutter: 5
+
+  row height: 60% {
+    panel hero {
+      image: "assets/test.png"
+      image_fit: cover
+      border: 2
+    }
+  }
+
+  row {
+    col { panel text1 }
+    col { panel text2 }
+  }
+}

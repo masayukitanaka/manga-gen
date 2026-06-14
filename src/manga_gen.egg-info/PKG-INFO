@@ -1,0 +1,136 @@
+Metadata-Version: 2.4
+Name: manga-gen
+Version: 1.0.0
+Summary: Manga panel layout DSL compiler with advanced features
+Author: MangaGEN Team
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: lark>=1.1.9
+Requires-Dist: cairosvg>=2.7.1
+Requires-Dist: click>=8.1.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: pillow>=10.0.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: mypy>=1.5.0; extra == "dev"
+Dynamic: license-file
+
+# MangaDSL
+
+漫画のコマ割りレイアウトを宣言的に記述するDSL（Domain Specific Language）とそのコンパイラ。
+
+## 特徴
+
+- 🎨 **宣言的なレイアウト記述**: row/col/panelで直感的にコマ割りを定義
+- 🖼️ **画像対応**: PNG, JPEG, GIF, SVGの画像をパネル内に配置可能
+- ⚡ **躍動感の演出**: コマの境界線を斜めにして動きのあるレイアウトを表現
+- 📐 **柔軟なサイズ指定**: %, mm, autoを組み合わせた自由なレイアウト
+- 🎯 **複数フォーマット出力**: SVGとPNG（高解像度対応）
+- 📏 **標準サイズ対応**: A3, A4, B4, B5 + カスタムサイズ
+
+## インストール
+
+```bash
+pip install -e .
+```
+
+## クイックスタート
+
+### 1. .mangaファイルを作成
+
+```manga
+// simple.manga
+page {
+  size: B5
+  gutter: 6
+
+  row height: 60% {
+    panel hero {
+      image: "images/hero.png"
+      image_fit: cover
+    }
+  }
+
+  row {
+    col { panel detail1 }
+    col { panel detail2 }
+  }
+}
+```
+
+### 2. コンパイル
+
+```bash
+# PNG出力（デフォルト）
+manga-gen simple.manga
+
+# SVG出力
+manga-gen simple.manga -o output.svg
+
+# 高解像度PNG
+manga-gen simple.manga -o print.png --dpi 600
+```
+
+## ドキュメント
+
+- [DSL言語リファレンス](docs/DSL.md) - 構文と使用例
+- [仕様書](docs/SPEC.md) - 実装仕様
+
+## サンプル
+
+[examples/](examples/) ディレクトリに実例があります：
+
+```bash
+# サンプルを実行
+manga-gen examples/yonkoma.manga -o yonkoma.png
+```
+
+## 主な機能
+
+### レイアウト
+
+- `row` / `col`: 縦・横方向の分割
+- サイズ指定: `height: 40%`, `width: 50mm`, 省略（auto）
+- ネスト: 任意の深さまで入れ子可能
+
+### パネル属性
+
+- `image`: 画像ファイルのパス（相対パス）
+- `image_fit`: `cover` / `contain` / `fill`
+- `text`: パネル内テキスト
+- `border`: 枠線の太さ
+- `importance`: 重要度（1-3）
+
+### 躍動感の演出
+
+コマの罫線を傾けて動きを表現：
+
+```manga
+panel action {
+  skew_left: 10   // 左の罫線を時計回りに10度傾ける
+  skew_right: -8  // 右の罫線を反時計回りに8度傾ける
+}
+```
+
+## ライセンス
+
+MIT
+
+## 開発
+
+```bash
+# 開発モードでインストール
+pip install -e ".[dev]"
+
+# テスト実行
+pytest
+
+# 型チェック
+mypy src
+
+# リンタ
+ruff check src
+```

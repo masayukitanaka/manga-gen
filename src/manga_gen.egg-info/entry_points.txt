@@ -1,0 +1,2 @@
+[console_scripts]
+manga-gen = manga_gen.cli:main

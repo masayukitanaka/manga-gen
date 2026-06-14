@@ -1,0 +1,26 @@
+// A3 size page example
+
+page {
+  size: A3
+  gutter: 8
+  padding: 15
+
+  row height: 50% {
+    col width: 60% {
+      panel large_panel {
+        importance: 1
+        border: 3
+      }
+    }
+    col {
+      row { panel small1 }
+      row { panel small2 }
+    }
+  }
+
+  row {
+    panel wide_panel {
+      importance: 2
+    }
+  }
+}

@@ -1,0 +1,64 @@
+// MangaDSL Grammar Definition
+// LALR(1) parser for Lark
+
+// Entry point
+start: page
+
+// Page declaration
+page: "page" CNAME? "{" page_body* "}"
+page_body: page_attr | statement
+
+// Page attributes
+page_attr: CNAME ":" value
+
+// Layout statements
+statement: row_stmt | col_stmt | panel_stmt
+
+row_stmt: "row" row_attrs? "{" statement* "}"
+col_stmt: "col" col_attrs? "{" statement* "}"
+panel_stmt: "panel" CNAME panel_def?
+
+panel_def: "{" panel_attr* "}"
+         | panel_inline_attrs
+
+panel_inline_attrs: panel_attr ("," panel_attr)*
+
+// Attributes
+row_attrs: row_attr ("," row_attr)*
+row_attr: row_height
+        | row_gutter
+        | row_align
+
+row_height: "height" ":" length_value
+row_gutter: "gutter" ":" NUMBER
+row_align: "align" ":" CNAME
+
+col_attrs: col_attr ("," col_attr)*
+col_attr: col_width
+        | col_gutter
+        | col_align
+
+col_width: "width" ":" length_value
+col_gutter: "gutter" ":" NUMBER
+col_align: "align" ":" CNAME
+
+panel_attr: CNAME ":" value
+
+// Values
+length_value: NUMBER UNIT | PERCENTAGE
+value: NUMBER UNIT?
+     | PERCENTAGE
+     | STRING
+     | CNAME
+
+// Terminals (ordered by priority - more specific first)
+PERCENTAGE.2: /\d+(\.\d+)?%/
+STRING.2: /"([^"\\]|\\.)*"/
+NUMBER: /-?\d+(\.\d+)?/
+UNIT: "mm" | "px" | "pt"
+CNAME: /[a-zA-Z_][a-zA-Z0-9_]*/
+
+// Ignore whitespace and comments
+%ignore /\s+/
+%ignore /\/\/[^\n]*/
+%ignore /\/\*([^*]|\*[^\/])*\*\//

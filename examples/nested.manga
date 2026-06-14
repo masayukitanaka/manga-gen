@@ -1,0 +1,33 @@
+// Action scene with skewed borders for dynamic effect
+
+page {
+  gutter: 6
+  border: 0.5
+
+  row height: 60% {
+    col {
+      panel top1 {
+
+      }
+    }
+    col {
+      row height: 40%{
+        panel split1 {
+          skew_bottom: 10
+        }
+      }
+      row {
+        panel split2 {
+          skew_top: 10
+        }
+      }
+    }
+  }
+
+  // Bottom panel (normal)
+  row {
+    panel aftermath {
+      // border: 1
+    }
+  }
+}

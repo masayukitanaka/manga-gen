@@ -1,0 +1,31 @@
+// Action scene with skewed borders for dynamic effect
+
+page {
+  gutter: 6
+  border: 1
+
+  // Upper panel: both sides tilted
+  row height: 20% {
+    col {
+      panel top1 {
+        skew_bottom: 10
+      }
+    }
+  }
+
+  // Middle row: alternating skew
+  row height: 20% {
+    col {
+      panel reaction3 {
+        skew_top: 10
+      }
+    }
+  }
+
+  // Bottom panel (normal)
+  row {
+    panel aftermath {
+      // border: 1
+    }
+  }
+}

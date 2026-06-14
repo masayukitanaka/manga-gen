@@ -1,0 +1,45 @@
+// Dynamic overlapping panels example
+
+page {
+  gutter: 6
+  border: 0.5
+  direction: ltr
+
+  // Top row: normal panel
+  row height: 30% {
+    panel background {
+      background: "#f0f0f0"
+    }
+  }
+
+  // Middle row: overlapping panels
+  row height: 40% {
+    col {
+      panel left_panel {
+        background: "#e0e0ff"
+        // Expand right to overlap with right panel
+        offset_left: 5
+      }
+    }
+    col {
+      panel right_panel {
+        background: "#ffe0e0"
+        // Expand up to bleed into top panel
+        offset_top: -8
+      }
+    }
+  }
+
+  // Bottom row: panel that bleeds down beyond page
+  row {
+    panel impact {
+      importance: 1
+      background: "#ffffe0"
+      // Expand on all sides for dramatic effect
+      offset_top: -5
+      offset_bottom: -10
+      offset_left: -8
+      offset_right: -8
+    }
+  }
+}

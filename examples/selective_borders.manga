@@ -1,0 +1,65 @@
+// Selective border example - creating rhythm with border omission
+
+page {
+  gutter: 6
+  border: 0.5
+  direction: ltr
+
+  // Top row: normal borders
+  row height: 20% {
+    panel normal {
+      background: "#f0f0f0"
+    }
+  }
+
+  // Second row: omit bottom border for flow
+  row height: 20% {
+    col {
+      panel flow1 {
+        border_bottom: 0  // Omit bottom border
+      }
+    }
+    col {
+      panel flow2 {
+        border_bottom: 0  // Omit bottom border
+      }
+    }
+  }
+
+  // Third row: omit top border to connect with above
+  row height: 20% {
+    col {
+      panel connect1 {
+        border_top: 0  // Omit top border
+      }
+    }
+    col {
+      panel connect2 {
+        border_top: 0  // Omit top border
+      }
+    }
+  }
+
+  // Fourth row: selective side borders
+  row height: 20% {
+    col {
+      panel left_only {
+        border_right: 0  // Omit right border
+      }
+    }
+    col {
+      panel right_only {
+        border_left: 0  // Omit left border
+      }
+    }
+  }
+
+  // Bottom row: dramatic panel with different border widths
+  row {
+    panel dramatic {
+      background: "#fff0e0"
+      border_left: 0    // No left border
+      border_right: 0   // No right border
+    }
+  }
+}

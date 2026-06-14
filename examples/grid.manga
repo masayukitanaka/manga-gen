@@ -1,0 +1,12 @@
+// 2x2 grid layout
+
+page {
+  row {
+    col { panel p1 }
+    col { panel p2 }
+  }
+  row {
+    col { panel p3 }
+    col { panel p4 }
+  }
+}

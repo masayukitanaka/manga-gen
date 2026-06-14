@@ -1,0 +1,31 @@
+// 2x2 grid layout
+
+page {
+  border: 0.5
+  direction: rtl
+
+  row height: 8% {
+    col { panel title1 }
+    col { panel title2 }
+  }
+
+  row height: 23%{
+    col { panel p11 }
+    col { panel p21 }
+  }
+
+  row height: 23%{
+    col { panel p12 }
+    col { panel p22 }
+  }
+
+  row height: 23%{
+    col { panel p13 }
+    col { panel p23 }
+  }
+
+  row height: 23%{
+    col { panel p14 }
+    col { panel p24 }
+  }
+}

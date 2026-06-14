@@ -1,0 +1,29 @@
+// Test file for comments
+
+page {
+  gutter: 6
+  // This is a single-line comment
+  border: 1
+
+  /* This is a
+     multi-line comment */
+
+  // Upper panel
+  row height: 50% {
+    panel top // inline comment
+  }
+
+  /* Second row with
+     two panels */
+  row {
+    col {
+      panel left {
+        // Panel attribute comment
+        border: 2
+      }
+    }
+    col {
+      panel right
+    }
+  }
+}
