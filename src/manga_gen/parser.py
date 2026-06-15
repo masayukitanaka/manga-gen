@@ -52,17 +52,26 @@ class MangaTransformer(Transformer):
     @v_args(inline=True)
     def page_attr(self, name: str, value: any) -> None:
         """page_attr: CNAME ":" value"""
+        import re
         attr_name = str(name)
 
         if attr_name == "size":
-            size_name = str(value)
-            if size_name in PAGE_SIZES:
-                width, height = PAGE_SIZES[size_name]
-                self.page_config.size = size_name  # type: ignore
+            value_str = str(value)
+            m = re.fullmatch(r"(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)(mm|px|pt)?", value_str)
+            if m:
+                w, h = float(m.group(1)), float(m.group(2))
+                unit = m.group(3) or "mm"
+                factor = {"mm": 1.0, "px": 25.4 / 96, "pt": 25.4 / 72}[unit]
+                self.page_config.size = value_str
+                self.page_config.width_mm = w * factor
+                self.page_config.height_mm = h * factor
+            elif value_str in PAGE_SIZES:
+                width, height = PAGE_SIZES[value_str]
+                self.page_config.size = value_str  # type: ignore
                 self.page_config.width_mm = width
                 self.page_config.height_mm = height
             else:
-                raise ParseError(f"Unknown page size: {size_name}")
+                raise ParseError(f"Unknown page size: {value_str}")
         elif attr_name == "direction":
             self.page_config.direction = str(value)  # type: ignore
         elif attr_name == "gutter":
@@ -93,13 +102,21 @@ class MangaTransformer(Transformer):
         height = None
         gutter = None
         align = "start"
+        margin_top = 0.0
+        margin_bottom = 0.0
+        margin_left = 0.0
+        margin_right = 0.0
         children = []
 
         for item in items:
             if isinstance(item, dict):
-                height = item.get("height")
-                gutter = item.get("gutter")
-                align = item.get("align", "start")
+                height = item.get("height", height)
+                gutter = item.get("gutter", gutter)
+                align = item.get("align", align)
+                margin_top = item.get("margin_top", margin_top)
+                margin_bottom = item.get("margin_bottom", margin_bottom)
+                margin_left = item.get("margin_left", margin_left)
+                margin_right = item.get("margin_right", margin_right)
             elif isinstance(item, (RowNode, ColNode, PanelNode)):
                 children.append(item)
 
@@ -107,6 +124,10 @@ class MangaTransformer(Transformer):
             height=height,
             gutter=gutter,
             align=align,  # type: ignore
+            margin_top=margin_top,
+            margin_bottom=margin_bottom,
+            margin_left=margin_left,
+            margin_right=margin_right,
             children=children
         )
 
@@ -116,13 +137,21 @@ class MangaTransformer(Transformer):
         width = None
         gutter = None
         align = "start"
+        margin_top = 0.0
+        margin_bottom = 0.0
+        margin_left = 0.0
+        margin_right = 0.0
         children = []
 
         for item in items:
             if isinstance(item, dict):
-                width = item.get("width")
-                gutter = item.get("gutter")
-                align = item.get("align", "start")
+                width = item.get("width", width)
+                gutter = item.get("gutter", gutter)
+                align = item.get("align", align)
+                margin_top = item.get("margin_top", margin_top)
+                margin_bottom = item.get("margin_bottom", margin_bottom)
+                margin_left = item.get("margin_left", margin_left)
+                margin_right = item.get("margin_right", margin_right)
             elif isinstance(item, (RowNode, ColNode, PanelNode)):
                 children.append(item)
 
@@ -130,6 +159,10 @@ class MangaTransformer(Transformer):
             width=width,
             gutter=gutter,
             align=align,  # type: ignore
+            margin_top=margin_top,
+            margin_bottom=margin_bottom,
+            margin_left=margin_left,
+            margin_right=margin_right,
             children=children
         )
 
@@ -179,7 +212,7 @@ class MangaTransformer(Transformer):
                             "offset_top", "offset_bottom", "offset_left", "offset_right",
                             "border_top", "border_bottom", "border_left", "border_right"]:
             return {attr_name: float(value)}
-        elif attr_name in ["image", "text", "border_color", "background", "shape"]:
+        elif attr_name in ["image", "text", "label", "border_color", "background", "shape"]:
             return {attr_name: str(value).strip('"')}
         elif attr_name in ["image_fit", "text_direction"]:
             return {attr_name: str(value)}
@@ -216,6 +249,11 @@ class MangaTransformer(Transformer):
         return {"align": str(value)}
 
     @v_args(inline=False)
+    def row_margin(self, items: list) -> dict[str, float]:
+        """row_margin: margin_key ":" NUMBER"""
+        return {str(items[0]): float(items[1])}
+
+    @v_args(inline=False)
     def col_attrs(self, items: list) -> dict[str, any]:
         """col_attrs: col_attr ("," col_attr)*"""
         attrs: dict[str, any] = {}
@@ -243,6 +281,11 @@ class MangaTransformer(Transformer):
     def col_align(self, value: str) -> dict[str, str]:
         """col_align: \"align\" \":\" CNAME"""
         return {"align": str(value)}
+
+    @v_args(inline=False)
+    def col_margin(self, items: list) -> dict[str, float]:
+        """col_margin: margin_key ":" NUMBER"""
+        return {str(items[0]): float(items[1])}
 
     @v_args(inline=False)
     def length_value(self, items: list) -> Length:

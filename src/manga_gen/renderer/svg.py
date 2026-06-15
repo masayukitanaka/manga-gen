@@ -318,8 +318,7 @@ class SVGRenderer:
         if attrs.text:
             self._render_text(g, panel)
 
-        # Debug: Panel ID as text (if no image/text)
-        if not attrs.image and not attrs.text:
+        if attrs.label is not None:
             ET.SubElement(g, "text", {
                 "x": str(r.x + r.w / 2),
                 "y": str(r.y + r.h / 2),
@@ -327,7 +326,7 @@ class SVGRenderer:
                 "dominant-baseline": "middle",
                 "font-size": "4",
                 "fill": "#999999",
-            }).text = panel.id
+            }).text = attrs.label if attrs.label else panel.id
 
     def _render_image(self, parent: ET.Element, panel: "LayoutedPanel") -> None:
         """Render image within panel.

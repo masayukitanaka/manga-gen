@@ -116,6 +116,10 @@ row {
 | `height` | `<n>%` \| `<n>mm` \| 省略 | auto | 高さ |
 | `gutter` | number (mm) | 継承 | この階層内のガター |
 | `align` | `start` \| `center` \| `end` | `start` | 余白がある場合の配置 |
+| `margin_top` | number (mm) | `0` | 上側のマージン |
+| `margin_bottom` | number (mm) | `0` | 下側のマージン |
+| `margin_left` | number (mm) | `0` | 左側のマージン |
+| `margin_right` | number (mm) | `0` | 右側のマージン |
 
 ### 3.2 col（列）
 
@@ -156,6 +160,10 @@ col {
 | `width` | `<n>%` \| `<n>mm` \| 省略 | auto | 幅 |
 | `gutter` | number (mm) | 継承 | この階層内のガター |
 | `align` | `start` \| `center` \| `end` | `start` | 余白がある場合の配置 |
+| `margin_top` | number (mm) | `0` | 上側のマージン |
+| `margin_bottom` | number (mm) | `0` | 下側のマージン |
+| `margin_left` | number (mm) | `0` | 左側のマージン |
+| `margin_right` | number (mm) | `0` | 右側のマージン |
 
 ### 3.3 panel（パネル）
 
@@ -184,6 +192,7 @@ panel quiet {
 | 属性 | 型 | デフォルト | 説明 |
 |------|-----|-----------|------|
 | `importance` | `1` \| `2` \| `3` | `2` | 重要度（1が最重要） |
+| `label` | string | なし | パネル内に表示するラベル。省略時は非表示。空文字列 `""` 指定でパネルIDを表示 |
 | `image` | string (path) | なし | パネル内画像のパス |
 | `image_fit` | `cover` \| `contain` \| `fill` | `cover` | 画像の収め方 |
 | `text` | string | なし | パネル内テキスト |

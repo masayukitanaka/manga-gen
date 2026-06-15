@@ -33,6 +33,7 @@ class PanelAttrs(BaseModel):
     importance: Literal[1, 2, 3] = 2
     image: Optional[str] = None
     image_fit: Literal["cover", "contain", "fill"] = "cover"
+    label: Optional[str] = None
     text: Optional[str] = None
     text_direction: Literal["horizontal", "vertical"] = "horizontal"
     border: float = 1.0
@@ -70,6 +71,10 @@ class RowNode(BaseModel):
     height: Optional[Length] = None
     gutter: Optional[float] = None
     align: Literal["start", "center", "end"] = "start"
+    margin_top: float = 0.0
+    margin_bottom: float = 0.0
+    margin_left: float = 0.0
+    margin_right: float = 0.0
     children: list["LayoutNode"]
 
 
@@ -80,6 +85,10 @@ class ColNode(BaseModel):
     width: Optional[Length] = None
     gutter: Optional[float] = None
     align: Literal["start", "center", "end"] = "start"
+    margin_top: float = 0.0
+    margin_bottom: float = 0.0
+    margin_left: float = 0.0
+    margin_right: float = 0.0
     children: list["LayoutNode"]
 
 

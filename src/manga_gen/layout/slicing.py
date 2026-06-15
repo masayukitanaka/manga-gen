@@ -241,22 +241,24 @@ class LayoutEngine:
         elif isinstance(node, RowNode):
             # Row: layout children horizontally
             child_gutter = node.gutter if node.gutter is not None else self.page.config.gutter
-            self._layout_children(
-                node.children,
-                rect,
-                "horizontal",
-                child_gutter
+            inner = Rect(
+                x=rect.x + node.margin_left,
+                y=rect.y + node.margin_top,
+                w=rect.w - node.margin_left - node.margin_right,
+                h=rect.h - node.margin_top - node.margin_bottom,
             )
+            self._layout_children(node.children, inner, "horizontal", child_gutter)
 
         elif isinstance(node, ColNode):
             # Col: layout children vertically
             child_gutter = node.gutter if node.gutter is not None else self.page.config.gutter
-            self._layout_children(
-                node.children,
-                rect,
-                "vertical",
-                child_gutter
+            inner = Rect(
+                x=rect.x + node.margin_left,
+                y=rect.y + node.margin_top,
+                w=rect.w - node.margin_left - node.margin_right,
+                h=rect.h - node.margin_top - node.margin_bottom,
             )
+            self._layout_children(node.children, inner, "vertical", child_gutter)
 
     def _resolve_shared_borders(self) -> None:
         """Detect shared borders between adjacent panels and disable redundant drawing.
