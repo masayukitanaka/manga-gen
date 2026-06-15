@@ -1,0 +1,132 @@
+page {
+  size: 1200x630
+  gutter: 6
+  border: 0.5
+  direction: ltr
+
+
+  row {
+
+  	col margin_top: 10, margin_bottom: 10, margin_left: 20, margin_right: 20 {
+	  // Top row: normal panel
+	  row height: 30% {
+	    panel  background  {
+	      background: "#f0f0f0"
+	    }
+	  }
+
+	  // Middle row: overlapping panels
+	  row height: 40% {
+	    col {
+	      panel left_panel {
+	        background: "#e0e0ff"
+	        // Expand right to overlap with right panel
+	        offset_top: -10
+	        offset_left: 20
+	        offset_right: -20
+	      }
+	    }
+	    col {
+	      row {
+			panel right_panel1 {
+		        background: "#ffe0e0"
+		        // Expand up to bleed into top panel
+		        skew_bottom: 10
+			}	
+	      }
+	      row {
+	      	panel right_panel2 {
+		        background: "#e0ffe0"
+		        skew_top: 10
+			}	
+	      }
+	    }
+	  }
+
+	  // Bottom row: panel that bleeds down beyond page
+	  row {
+	    panel impact {
+	      importance: 1
+	      background: "#ffffe0"
+	      // Expand on all sides for dramatic effect
+	      offset_top: -10
+	      offset_bottom: -20
+	      offset_left: -20
+	      offset_right: -20
+	    }
+	  }
+  	}
+
+  	col margin_top: 10, margin_bottom: 10, margin_left: 20, margin_right: 20 {
+  		
+	  row height: 8% {
+	    col { 
+	      panel title1 
+	    }
+	    col { 
+	      panel title2 
+	    }
+	  }
+
+	  row height: 23%{
+	    col { 
+	      panel p11 {
+	        image: "assets/m1.png"
+	        image_fit: cover
+	      }
+	    }
+	    col { 
+	      panel p21 {
+	        image: "assets/n1.png"
+	    	image_fit: cover
+	      }
+	    }
+	  }
+
+	  row height: 23%{
+	    col { 
+	      panel p12 {
+	    	image: "assets/m2.png"
+	    	image_fit: cover
+	      }
+	    }
+	    col { 
+	      panel p22 {
+	        image: "assets/n2.png"
+	    	image_fit: cover
+	      }
+	    }
+	  }
+
+	  row height: 23%{
+	    col { 
+	      panel p13 {
+	    	image: "assets/m3.png"
+	    	image_fit: cover
+	      }
+	    }
+	    col { 
+	      panel p23 {
+	        image: "assets/n3.png"
+	    	image_fit: cover
+	      }
+	    }
+	  }
+
+	  row height: 23%{
+	    col { 
+	      panel p14 {
+	        image: "assets/m5.png"
+	        image_fit: contain
+	      }
+	    }
+	    col { 
+	      panel p24 {
+	        image: "assets/n4.png"
+	    	image_fit: cover
+	      }
+	    }
+	  }
+  	}
+  }
+}

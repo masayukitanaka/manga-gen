@@ -1,0 +1,38 @@
+// margin_* attributes demo
+// margin_top/bottom/left/right shrink the layout rect of row/col
+
+page {
+  // Row with margin_top and margin_bottom: vertical spacing inside the row's slot
+  row height: 30% {
+    panel no_margin { label: "no margin" }
+    col margin_left: 10, margin_right: 10 {
+      panel col_lr { label: "col margin L+R" }
+    }
+    panel no_margin2 { label: "no margin" }
+  }
+
+  // Row with margin_left only: indented from the left edge
+  row height: 20%, margin_left: 20 {
+    panel indent_left { label: "row margin_left: 20" }
+    panel indent_left2 { label: "row margin_left: 20" }
+  }
+
+  // Row with all four margins
+  row height: 20%, margin_top: 5, margin_bottom: 5, margin_left: 10, margin_right: 10 {
+    panel all_margin { label: "row all margins" }
+    panel all_margin2 { label: "row all margins" }
+  }
+
+  // Col containers with margin_top / margin_bottom
+  row {
+    col margin_top: 15 {
+      panel top_margin { label: "col margin_top: 15" }
+    }
+    col margin_bottom: 15 {
+      panel bottom_margin { label: "col margin_bottom: 15" }
+    }
+    col margin_top: 10, margin_bottom: 10 {
+      panel tb_margin { label: "col margin T+B" }
+    }
+  }
+}
