@@ -61,13 +61,16 @@ class MangaTransformer(Transformer):
             if m:
                 w, h = float(m.group(1)), float(m.group(2))
                 unit = m.group(3) or "mm"
-                factor = {"mm": 1.0, "px": 25.4 / 96, "pt": 25.4 / 72}[unit]
                 self.page_config.size = value_str
+                self.page_config.size_unit = unit  # type: ignore
+                # Always convert to mm for layout calculations
+                factor = {"mm": 1.0, "px": 25.4 / 96, "pt": 25.4 / 72}[unit]
                 self.page_config.width_mm = w * factor
                 self.page_config.height_mm = h * factor
             elif value_str in PAGE_SIZES:
                 width, height = PAGE_SIZES[value_str]
-                self.page_config.size = value_str  # type: ignore
+                self.page_config.size = value_str
+                self.page_config.size_unit = "mm"
                 self.page_config.width_mm = width
                 self.page_config.height_mm = height
             else:

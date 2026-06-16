@@ -28,14 +28,28 @@ class SVGRenderer:
         """
         cfg = self.page.config
 
-        # Create SVG root element
-        svg = ET.Element("svg", {
-            "xmlns": "http://www.w3.org/2000/svg",
-            "xmlns:xlink": "http://www.w3.org/1999/xlink",
-            "width": f"{cfg.width_mm}mm",
-            "height": f"{cfg.height_mm}mm",
-            "viewBox": f"0 0 {cfg.width_mm} {cfg.height_mm}",
-        })
+        if cfg.size_unit == "px":
+            # px-specified: SVG viewport = original px, layout coords (mm) scaled up via viewBox
+            # viewBox in mm units so all panel coords (mm) work as-is
+            MM_PER_INCH = 25.4
+            PX_PER_INCH = 96.0
+            w_px = round(cfg.width_mm / (MM_PER_INCH / PX_PER_INCH))
+            h_px = round(cfg.height_mm / (MM_PER_INCH / PX_PER_INCH))
+            svg = ET.Element("svg", {
+                "xmlns": "http://www.w3.org/2000/svg",
+                "xmlns:xlink": "http://www.w3.org/1999/xlink",
+                "width": str(w_px),
+                "height": str(h_px),
+                "viewBox": f"0 0 {cfg.width_mm} {cfg.height_mm}",
+            })
+        else:
+            svg = ET.Element("svg", {
+                "xmlns": "http://www.w3.org/2000/svg",
+                "xmlns:xlink": "http://www.w3.org/1999/xlink",
+                "width": f"{cfg.width_mm}mm",
+                "height": f"{cfg.height_mm}mm",
+                "viewBox": f"0 0 {cfg.width_mm} {cfg.height_mm}",
+            })
 
         # Page background
         ET.SubElement(svg, "rect", {

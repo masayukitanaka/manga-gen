@@ -68,10 +68,17 @@ def main(input: str, output: str | None, fmt: str, dpi: int | None) -> None:
             svg_str = renderer.render()
             output_path.write_text(svg_str, encoding="utf-8")
         else:
-            # Use specified DPI or page config DPI
-            actual_dpi = dpi if dpi is not None else page.config.dpi
             svg_str = renderer.render()
-            png_bytes = svg_to_png(svg_str, dpi=actual_dpi)
+            if page.config.size_unit == "px" and dpi is None:
+                # px-specified size: render at exact pixel dimensions
+                MM_PER_INCH = 25.4
+                PX_PER_INCH = 96.0
+                w_px = round(page.config.width_mm / (MM_PER_INCH / PX_PER_INCH))
+                h_px = round(page.config.height_mm / (MM_PER_INCH / PX_PER_INCH))
+                png_bytes = svg_to_png(svg_str, output_width=w_px, output_height=h_px)
+            else:
+                actual_dpi = dpi if dpi is not None else page.config.dpi
+                png_bytes = svg_to_png(svg_str, dpi=actual_dpi)
             output_path.write_bytes(png_bytes)
 
         click.echo(f"✓ Output: {output_path}")

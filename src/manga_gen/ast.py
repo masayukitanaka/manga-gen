@@ -15,7 +15,8 @@ class Length(BaseModel):
 class PageConfig(BaseModel):
     """Page-level configuration settings."""
     name: Optional[str] = None
-    size: Literal["A3", "A4", "B4", "B5"] = "A4"
+    size: str = "A4"
+    size_unit: Literal["mm", "px", "pt"] = "mm"  # unit of the custom size spec
     width_mm: float = 210.0
     height_mm: float = 297.0
     direction: Literal["rtl", "ltr"] = "ltr"
