@@ -116,6 +116,10 @@ row {
 | `height` | `<n>%` \| `<n>mm` \| omitted | auto | Height |
 | `gutter` | number (mm) | inherited | Gutter within this level |
 | `align` | `start` \| `center` \| `end` | `start` | Alignment when there is extra space |
+| `skew_left` | number (degrees) | `0` | Left boundary skew angle (inherited by child panels) |
+| `skew_right` | number (degrees) | `0` | Right boundary skew angle (inherited by child panels) |
+| `skew_top` | number (degrees) | `0` | Top boundary skew angle (inherited by child panels) |
+| `skew_bottom` | number (degrees) | `0` | Bottom boundary skew angle (inherited by child panels) |
 
 ### 3.2 col
 
@@ -156,6 +160,37 @@ col {
 | `width` | `<n>%` \| `<n>mm` \| omitted | auto | Width |
 | `gutter` | number (mm) | inherited | Gutter within this level |
 | `align` | `start` \| `center` \| `end` | `start` | Alignment when there is extra space |
+| `skew_left` | number (degrees) | `0` | Left boundary skew angle (inherited by child panels) |
+| `skew_right` | number (degrees) | `0` | Right boundary skew angle (inherited by child panels) |
+| `skew_top` | number (degrees) | `0` | Top boundary skew angle (inherited by child panels) |
+| `skew_bottom` | number (degrees) | `0` | Bottom boundary skew angle (inherited by child panels) |
+
+#### Applying skew to col (Skewing an Entire Column's Boundary)
+
+Setting `skew_right` on a `col` tilts that column's right boundary and propagates the angle to all panels inside. This lets you apply a diagonal gutter to an entire column without setting skew on each panel individually.
+
+```manga
+page {
+  gutter: 6
+  border: 1
+
+  row {
+    col {
+      skew_right: -6        // Tilt the right boundary of this column -6 degrees
+      panel left1 {}        // left1's right border gets the -6 degree tilt
+    }
+    col {
+      row { panel right1 {} }   // right1's left border also gets the tilt
+      row { panel right2 {} }   // right2 likewise
+    }
+  }
+}
+```
+
+**Key points:**
+- `skew_right` on a `col` affects **both** that column's right boundary and the adjacent column's left boundary.
+- All panels inside the column inherit the skew, even when the column contains multiple `row` elements.
+- The gutter between the two columns is automatically rendered as the white space between the two parallel diagonal border lines.
 
 ### 3.3 panel
 
@@ -625,6 +660,30 @@ page action {
   }
 }
 ```
+
+### Example 9: Skew on col/row (Diagonal Boundaries for Column Layouts)
+
+Applying skew to an entire column lets you tilt the boundary for all panels inside it at once.
+
+```manga
+page {
+  gutter: 6
+  border: 1
+
+  row {
+    col {
+      skew_right: -6    // Tilt the right boundary of the left column
+      panel left1 {}
+    }
+    col {
+      row { panel right1 {} }
+      row { panel right2 {} }
+    }
+  }
+}
+```
+
+The gutter between the two columns is rendered as two parallel diagonal lines. The gutter between `right1` and `right2` inside the right column is rendered as a normal horizontal gap.
 
 ---
 

@@ -120,6 +120,10 @@ row {
 | `margin_bottom` | number (mm) | `0` | 下側のマージン |
 | `margin_left` | number (mm) | `0` | 左側のマージン |
 | `margin_right` | number (mm) | `0` | 右側のマージン |
+| `skew_left` | number (度) | `0` | 左境界の傾斜角度（内包パネルに継承） |
+| `skew_right` | number (度) | `0` | 右境界の傾斜角度（内包パネルに継承） |
+| `skew_top` | number (度) | `0` | 上境界の傾斜角度（内包パネルに継承） |
+| `skew_bottom` | number (度) | `0` | 下境界の傾斜角度（内包パネルに継承） |
 
 ### 3.2 col（列）
 
@@ -164,6 +168,37 @@ col {
 | `margin_bottom` | number (mm) | `0` | 下側のマージン |
 | `margin_left` | number (mm) | `0` | 左側のマージン |
 | `margin_right` | number (mm) | `0` | 右側のマージン |
+| `skew_left` | number (度) | `0` | 左境界の傾斜角度（内包パネルに継承） |
+| `skew_right` | number (度) | `0` | 右境界の傾斜角度（内包パネルに継承） |
+| `skew_top` | number (度) | `0` | 上境界の傾斜角度（内包パネルに継承） |
+| `skew_bottom` | number (度) | `0` | 下境界の傾斜角度（内包パネルに継承） |
+
+#### col への skew 指定（列全体の境界を傾ける）
+
+`col` に `skew_right` を指定すると、その列の右境界が傾き、内包するすべてのパネルに継承されます。これにより、列内のパネルを個別に設定しなくても、列単位で斜め境界を表現できます。
+
+```manga
+page {
+  gutter: 6
+  border: 1
+
+  row {
+    col {
+      skew_right: -6        // この列の右境界を-6度傾ける
+      panel left1 {}        // left1の右辺に-6度の傾きが適用される
+    }
+    col {
+      row { panel right1 {} }   // right1の左辺にも同じ傾きが適用
+      row { panel right2 {} }   // right2も同様
+    }
+  }
+}
+```
+
+**ポイント:**
+- `col` の `skew_right` は、その列の右境界と隣接する列の左境界の**両方**に影響します
+- 列内に複数の `row` がある場合、すべてのパネルに傾きが継承されます
+- コマ間（ガター）は、傾いた境界線2本の間の空白として自動的に表現されます
 
 ### 3.3 panel（パネル）
 
@@ -636,6 +671,30 @@ page action {
 }
 ```
 
+### 例9: col/row への skew 指定（段組の斜め境界）
+
+列全体の境界を傾けることで、列内の複数パネルに一括してskewを適用できます。
+
+```manga
+page {
+  gutter: 6
+  border: 1
+
+  row {
+    col {
+      skew_right: -6    // 左列の右境界を傾ける
+      panel left1 {}
+    }
+    col {
+      row { panel right1 {} }
+      row { panel right2 {} }
+    }
+  }
+}
+```
+
+このとき、左列と右列の間のガターは傾いた2本の平行線で表現されます。右列内の `right1` と `right2` のコマ間は通常の水平ガターとして描画されます。
+
 ---
 
 ## 7. ベストプラクティス
@@ -715,4 +774,4 @@ Error: Unsupported image format: 'image.bmp'
 ---
 
 **MangaDSL Language Reference v1.0**
-最終更新: 2026-06-12
+最終更新: 2026-06-20

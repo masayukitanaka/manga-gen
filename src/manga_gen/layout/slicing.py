@@ -418,8 +418,8 @@ class LayoutEngine:
             shared_skew = skew_l + skew_r  # one is 0, so this equals the non-zero one
 
         shared_x = rl.x + rl.w + gap / 2
-        left.shared_right_x = shared_x
-        right.shared_left_x = shared_x
+        left.shared_right_x = rl.x + rl.w   # left panel's own right boundary
+        right.shared_left_x = rr.x           # right panel's own left boundary
 
         # Decide which side owns the shared border line.
         # When the left panel has skew_right (skew_l != 0), it draws the line.
@@ -432,39 +432,38 @@ class LayoutEngine:
         left_draws  = left_right_bw  > 0
         right_draws = right_left_bw  > 0
 
-        # Use the gutter centre as the single reference x for both polygon corners.
-        # This ensures the owning panel's border line and the non-owning panel's
-        # polygon edge are evaluated at the same x, so they meet exactly.
-        border_x = shared_x  # gutter centre
+        # Each panel draws its own skewline at its own rect boundary.
+        # left panel's right edge at rl.x+rl.w, right panel's left edge at rr.x.
+        # Both lines are parallel (same angle, same mid_y) but offset by the gutter width,
+        # forming the two visible edges of the skewed gutter.
+        left_border_x  = rl.x + rl.w   # left panel's right rect edge
+        right_border_x = rr.x           # right panel's left rect edge
 
-        if skew_l != 0:
-            # Left panel owns the shared border line.
-            right.draw_left = False
+        effective_skew = skew_l if skew_l != 0 else skew_r
+
+        if effective_skew != 0:
             if left_draws:
-                left.shared_right_skewline  = SkewLine(border_x, ref_mid_y, skew_l)
-                right.shared_left_skewline  = SkewLine(border_x, ref_mid_y, skew_l)
-                # Owning panel: expand Y range to cover all neighbors (union).
+                left.shared_right_skewline = SkewLine(left_border_x, ref_mid_y, effective_skew)
                 prev = left.shared_right_skewline_y
                 left.shared_right_skewline_y = (
                     min(prev[0], overlap_top) if prev else overlap_top,
                     max(prev[1], overlap_bottom) if prev else overlap_bottom,
                 )
-                # Mirroring panel: use its own overlap range.
-                right.shared_left_skewline_y = (overlap_top, overlap_bottom)
-        else:
-            # Only right panel has skew — its polygon left edge is the visual border.
-            left.draw_right = False
             if right_draws:
-                right.shared_left_skewline  = SkewLine(border_x, ref_mid_y, skew_r)
-                left.shared_right_skewline  = SkewLine(border_x, ref_mid_y, skew_r)
-                # Owning panel: expand Y range to cover all neighbors (union).
+                right.shared_left_skewline = SkewLine(right_border_x, ref_mid_y, effective_skew)
                 prev = right.shared_left_skewline_y
-                right.shared_left_skewline_y = (
-                    min(prev[0], overlap_top) if prev else overlap_top,
-                    max(prev[1], overlap_bottom) if prev else overlap_bottom,
-                )
-                # Mirroring panel: use its own overlap range.
-                left.shared_right_skewline_y = (overlap_top, overlap_bottom)
+                new_top = overlap_top
+                new_bottom = overlap_bottom
+                if prev:
+                    # Bridge the gutter gap between the previous neighbor's range and
+                    # this neighbor's range so the diagonal is continuous.
+                    new_top = min(prev[0], overlap_top)
+                    new_bottom = max(prev[1], overlap_bottom)
+                elif rl.y < rr.y:
+                    # The left panel starts above this right panel — extend the range
+                    # upward through the gutter so the diagonal meets the horizontal border.
+                    new_top = min(rr.y - gap, overlap_top)
+                right.shared_left_skewline_y = (new_top, new_bottom)
 
     def _link_tb(
         self,

@@ -305,21 +305,33 @@ class SVGRenderer:
                 })
 
             # Left/right borders.
-            # The Y extent of each vertical edge must be trimmed to where the slanted
-            # top/bottom borders intersect the left (or right) side of the panel.
-            # For the left edge: use shared_top_endpoints[1] (ty1) as the top Y and
-            # shared_bottom_endpoints[1] (by1) as the bottom Y.
-            # For the right edge: use shared_top_endpoints[3] (ty2) and
-            # shared_bottom_endpoints[3] (by2).
-            left_top_y    = panel.shared_top_endpoints[1]    if panel.shared_top_endpoints    else r.y
-            left_bottom_y = panel.shared_bottom_endpoints[1] if panel.shared_bottom_endpoints else r.y + r.h
-            right_top_y   = panel.shared_top_endpoints[3]    if panel.shared_top_endpoints    else r.y
-            right_bottom_y= panel.shared_bottom_endpoints[3] if panel.shared_bottom_endpoints else r.y + r.h
+            # The Y extent of each vertical edge must meet the slanted top/bottom borders
+            # exactly where they cross the left (or right) side of the panel.
+            # Vertical border (left/right edge) Y extent.
+            # Default: panel rect top/bottom, adjusted by shared slanted top/bottom endpoints.
+            if panel.shared_top_endpoints:
+                _tx1, _ty1, _tx2, _ty2 = panel.shared_top_endpoints
+                left_top_y  = _ty1
+                right_top_y = _ty2
+            else:
+                left_top_y = right_top_y = r.y
+
+            if panel.shared_bottom_endpoints:
+                _bx1, _by1, _bx2, _by2 = panel.shared_bottom_endpoints
+                left_bottom_y  = _by1
+                right_bottom_y = _by2
+            else:
+                left_bottom_y = right_bottom_y = r.y + r.h
+
 
             if panel.draw_left and border_left_width > 0:
                 if panel.shared_left_skewline:
                     sl = panel.shared_left_skewline
                     y1, y2 = panel.shared_left_skewline_y if panel.shared_left_skewline_y else (r.y, r.y + r.h)
+                    # Clamp to panel rect top: if the skewline bridges the gutter,
+                    # don't draw it above r.y — the neighbor's bottom border already
+                    # covers that segment, and drawing above r.y creates a wedge gap.
+                    y1 = max(y1, r.y)
                     _line(border_parent, sl.x_at(y1), y1, sl.x_at(y2), y2, border_left_width)
                 else:
                     # Draw to border_parent so slanted top/bottom endpoint trimming
@@ -338,11 +350,28 @@ class SVGRenderer:
 
             # Top/bottom: slanted lines drawn without clipPath so the full diagonal
             # is always visible across the entire panel width.
-            if panel.draw_top and border_top_width > 0:
+            # When a vertical skewline is shared on the left or right, adjust the
+            # draw_top=False is set by _link_tb to suppress double-drawing of flat shared
+            # borders. Override when a vertical skewline is present: the skewline trims
+            # the top border's start X, making it unique to this panel.
+            needs_top = panel.draw_top or (
+                border_top_width > 0 and
+                (panel.shared_left_skewline or panel.shared_right_skewline) and
+                panel.shared_top_endpoints is not None
+            )
+            if needs_top and border_top_width > 0:
                 if panel.shared_top_endpoints:
                     tx1, ty1, tx2, ty2 = panel.shared_top_endpoints
                 else:
                     tx1, ty1, tx2, ty2 = tl_x, tl_y, tr_x, tr_y
+                if panel.shared_left_skewline:
+                    sl_y0 = (panel.shared_left_skewline_y[0]
+                             if panel.shared_left_skewline_y else ty1)
+                    tx1 = panel.shared_left_skewline.x_at(sl_y0)
+                if panel.shared_right_skewline:
+                    sl_y0 = (panel.shared_right_skewline_y[0]
+                             if panel.shared_right_skewline_y else ty2)
+                    tx2 = panel.shared_right_skewline.x_at(sl_y0)
                 _line(border_parent, tx1, ty1, tx2, ty2, border_top_width)
 
             if panel.draw_bottom and border_bottom_width > 0:
@@ -350,6 +379,10 @@ class SVGRenderer:
                     bx1, by1, bx2, by2 = panel.shared_bottom_endpoints
                 else:
                     bx1, by1, bx2, by2 = bl_x, bl_y, br_x, br_y
+                if panel.shared_left_skewline:
+                    bx1 = panel.shared_left_skewline.x_at(by1)
+                if panel.shared_right_skewline:
+                    bx2 = panel.shared_right_skewline.x_at(by2)
                 _line(border_parent, bx1, by1, bx2, by2, border_bottom_width)
         else:
             # Render as rectangle (no skew)
