@@ -50,8 +50,13 @@ class MangaTransformer(Transformer):
         return item
 
     @v_args(inline=True)
+    def page_attr_key(self, key: any) -> str:
+        """page_attr_key: CNAME | GUTTER_KW"""
+        return str(key)
+
+    @v_args(inline=True)
     def page_attr(self, name: str, value: any) -> None:
-        """page_attr: CNAME ":" value"""
+        """page_attr: page_attr_key ":" value"""
         import re
         attr_name = str(name)
 
@@ -99,9 +104,19 @@ class MangaTransformer(Transformer):
         """statement: row_stmt | col_stmt | panel_stmt"""
         return items[0]
 
+    @v_args(inline=True)
+    def row_body(self, item: any) -> any:
+        """row_body: row_attr | statement"""
+        return item
+
+    @v_args(inline=True)
+    def col_body(self, item: any) -> any:
+        """col_body: col_attr | statement"""
+        return item
+
     @v_args(inline=False)
     def row_stmt(self, items: list) -> RowNode:
-        """row_stmt: "row" row_attrs? "{" statement* "}" """
+        """row_stmt: "row" row_attrs? "{" row_body* "}" """
         height = None
         gutter = None
         align = "start"
@@ -109,6 +124,10 @@ class MangaTransformer(Transformer):
         margin_bottom = 0.0
         margin_left = 0.0
         margin_right = 0.0
+        skew_left = None
+        skew_right = None
+        skew_top = None
+        skew_bottom = None
         children = []
 
         for item in items:
@@ -120,6 +139,14 @@ class MangaTransformer(Transformer):
                 margin_bottom = item.get("margin_bottom", margin_bottom)
                 margin_left = item.get("margin_left", margin_left)
                 margin_right = item.get("margin_right", margin_right)
+                if "skew_left" in item:
+                    skew_left = item["skew_left"]
+                if "skew_right" in item:
+                    skew_right = item["skew_right"]
+                if "skew_top" in item:
+                    skew_top = item["skew_top"]
+                if "skew_bottom" in item:
+                    skew_bottom = item["skew_bottom"]
             elif isinstance(item, (RowNode, ColNode, PanelNode)):
                 children.append(item)
 
@@ -131,12 +158,16 @@ class MangaTransformer(Transformer):
             margin_bottom=margin_bottom,
             margin_left=margin_left,
             margin_right=margin_right,
+            skew_left=skew_left,
+            skew_right=skew_right,
+            skew_top=skew_top,
+            skew_bottom=skew_bottom,
             children=children
         )
 
     @v_args(inline=False)
     def col_stmt(self, items: list) -> ColNode:
-        """col_stmt: "col" col_attrs? "{" statement* "}" """
+        """col_stmt: "col" col_attrs? "{" col_body* "}" """
         width = None
         gutter = None
         align = "start"
@@ -144,6 +175,10 @@ class MangaTransformer(Transformer):
         margin_bottom = 0.0
         margin_left = 0.0
         margin_right = 0.0
+        skew_left = None
+        skew_right = None
+        skew_top = None
+        skew_bottom = None
         children = []
 
         for item in items:
@@ -155,6 +190,14 @@ class MangaTransformer(Transformer):
                 margin_bottom = item.get("margin_bottom", margin_bottom)
                 margin_left = item.get("margin_left", margin_left)
                 margin_right = item.get("margin_right", margin_right)
+                if "skew_left" in item:
+                    skew_left = item["skew_left"]
+                if "skew_right" in item:
+                    skew_right = item["skew_right"]
+                if "skew_top" in item:
+                    skew_top = item["skew_top"]
+                if "skew_bottom" in item:
+                    skew_bottom = item["skew_bottom"]
             elif isinstance(item, (RowNode, ColNode, PanelNode)):
                 children.append(item)
 
@@ -166,6 +209,10 @@ class MangaTransformer(Transformer):
             margin_bottom=margin_bottom,
             margin_left=margin_left,
             margin_right=margin_right,
+            skew_left=skew_left,
+            skew_right=skew_right,
+            skew_top=skew_top,
+            skew_bottom=skew_bottom,
             children=children
         )
 
@@ -206,8 +253,13 @@ class MangaTransformer(Transformer):
         return attrs
 
     @v_args(inline=True)
+    def panel_attr_key(self, key: any) -> str:
+        """panel_attr_key: CNAME | SKEW_KEY | MARGIN_KEY | GUTTER_KW"""
+        return str(key)
+
+    @v_args(inline=True)
     def panel_attr(self, name: str, value: any) -> dict[str, any]:
-        """panel_attr: CNAME ":" value"""
+        """panel_attr: panel_attr_key ":" value"""
         attr_name = str(name)
         if attr_name == "importance":
             return {attr_name: int(float(value))}
@@ -243,7 +295,7 @@ class MangaTransformer(Transformer):
 
     @v_args(inline=True)
     def row_gutter(self, value: str) -> dict[str, float]:
-        """row_gutter: \"gutter\" \":\" NUMBER"""
+        """row_gutter: GUTTER_KW ":" NUMBER"""
         return {"gutter": float(value)}
 
     @v_args(inline=True)
@@ -254,6 +306,11 @@ class MangaTransformer(Transformer):
     @v_args(inline=False)
     def row_margin(self, items: list) -> dict[str, float]:
         """row_margin: margin_key ":" NUMBER"""
+        return {str(items[0]): float(items[1])}
+
+    @v_args(inline=False)
+    def row_skew(self, items: list) -> dict[str, float]:
+        """row_skew: SKEW_KEY ":" NUMBER"""
         return {str(items[0]): float(items[1])}
 
     @v_args(inline=False)
@@ -277,7 +334,7 @@ class MangaTransformer(Transformer):
 
     @v_args(inline=True)
     def col_gutter(self, value: str) -> dict[str, float]:
-        """col_gutter: \"gutter\" \":\" NUMBER"""
+        """col_gutter: GUTTER_KW ":" NUMBER"""
         return {"gutter": float(value)}
 
     @v_args(inline=True)
@@ -288,6 +345,11 @@ class MangaTransformer(Transformer):
     @v_args(inline=False)
     def col_margin(self, items: list) -> dict[str, float]:
         """col_margin: margin_key ":" NUMBER"""
+        return {str(items[0]): float(items[1])}
+
+    @v_args(inline=False)
+    def col_skew(self, items: list) -> dict[str, float]:
+        """col_skew: SKEW_KEY ":" NUMBER"""
         return {str(items[0]): float(items[1])}
 
     @v_args(inline=False)

@@ -76,6 +76,11 @@ class RowNode(BaseModel):
     margin_bottom: float = 0.0
     margin_left: float = 0.0
     margin_right: float = 0.0
+    # Inherited skew: applied to all child panels that don't override individually
+    skew_left: Optional[float] = None
+    skew_right: Optional[float] = None
+    skew_top: Optional[float] = None
+    skew_bottom: Optional[float] = None
     children: list["LayoutNode"]
 
 
@@ -90,6 +95,11 @@ class ColNode(BaseModel):
     margin_bottom: float = 0.0
     margin_left: float = 0.0
     margin_right: float = 0.0
+    # Inherited skew: applied to all child panels that don't override individually
+    skew_left: Optional[float] = None
+    skew_right: Optional[float] = None
+    skew_top: Optional[float] = None
+    skew_bottom: Optional[float] = None
     children: list["LayoutNode"]
 
 

@@ -8,15 +8,23 @@ start: page
 page: "page" CNAME? "{" page_body* "}"
 page_body: page_attr | statement
 
-// Page attributes
-page_attr: CNAME ":" SIZE_VALUE
-         | CNAME ":" value
+// Page attributes — accept CNAME or any keyword-terminal that the lexer may
+// promote (e.g. "gutter" becomes GUTTER when row/col rules are present).
+page_attr: page_attr_key ":" SIZE_VALUE
+         | page_attr_key ":" value
+
+page_attr_key: CNAME | GUTTER_KW
+
+GUTTER_KW.3: "gutter"
 
 // Layout statements
 statement: row_stmt | col_stmt | panel_stmt
 
-row_stmt: "row" row_attrs? "{" statement* "}"
-col_stmt: "col" col_attrs? "{" statement* "}"
+row_stmt: "row" row_attrs? "{" row_body* "}"
+col_stmt: "col" col_attrs? "{" col_body* "}"
+
+row_body: row_attr | statement
+col_body: col_attr | statement
 panel_stmt: "panel" CNAME panel_def?
 
 panel_def: "{" panel_attr* "}"
@@ -30,24 +38,30 @@ row_attr: row_height
         | row_gutter
         | row_align
         | row_margin
+        | row_skew
 
 row_height: "height" ":" length_value
-row_gutter: "gutter" ":" NUMBER
+row_gutter: GUTTER_KW ":" NUMBER
 row_align: "align" ":" CNAME
 row_margin: MARGIN_KEY ":" NUMBER
+row_skew: SKEW_KEY ":" NUMBER
 
 col_attrs: col_attr ("," col_attr)*
 col_attr: col_width
         | col_gutter
         | col_align
         | col_margin
+        | col_skew
 
 col_width: "width" ":" length_value
-col_gutter: "gutter" ":" NUMBER
+col_gutter: GUTTER_KW ":" NUMBER
 col_align: "align" ":" CNAME
 col_margin: MARGIN_KEY ":" NUMBER
+col_skew: SKEW_KEY ":" NUMBER
 
-panel_attr: CNAME ":" value
+panel_attr: panel_attr_key ":" value
+
+panel_attr_key: CNAME | SKEW_KEY | MARGIN_KEY | GUTTER_KW
 
 // Values
 length_value: NUMBER UNIT | PERCENTAGE
@@ -58,6 +72,7 @@ value: NUMBER UNIT?
 
 // Terminals (ordered by priority - more specific first)
 MARGIN_KEY.2: "margin_top" | "margin_bottom" | "margin_left" | "margin_right"
+SKEW_KEY.2: "skew_left" | "skew_right" | "skew_top" | "skew_bottom"
 PERCENTAGE.2: /\d+(\.\d+)?%/
 STRING.2: /"([^"\\]|\\.)*"/
 SIZE_VALUE.3: /\d+(\.\d+)?x\d+(\.\d+)?(mm|px|pt)?/

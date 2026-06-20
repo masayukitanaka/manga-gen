@@ -19,6 +19,28 @@ class Rect:
 
 
 @dataclass
+class SkewLine:
+    """A skewed straight line for a shared vertical border.
+
+    The line passes through (base_x, mid_y) at the given angle.
+    Both the left panel's right edge and the right panel's left edge have
+    their own base_x (panel boundary), but share mid_y and skew_angle so
+    they are exactly parallel.
+
+    x_at(y) computes the X position of *this panel's edge* at height y.
+    """
+    base_x: float      # X of this panel's own boundary at mid_y
+    mid_y: float       # Shared reference Y (midpoint of the taller panel)
+    skew_angle: float  # degrees — shared between both sides
+
+    def x_at(self, y: float) -> float:
+        import math
+        if self.skew_angle == 0.0:
+            return self.base_x
+        return self.base_x + (y - self.mid_y) * math.tan(math.radians(self.skew_angle))
+
+
+@dataclass
 class LayoutedPanel:
     """A panel with computed layout (absolute coordinates)."""
     id: str
@@ -29,20 +51,21 @@ class LayoutedPanel:
     draw_top: bool = True
     draw_bottom: bool = True
     # Skew values from adjacent panels for shared borders
-    adjacent_left_skew: float = 0.0  # Left neighbor's right edge skew
-    adjacent_right_skew: float = 0.0  # Right neighbor's left edge skew
-    adjacent_top_skew: float = 0.0  # Top neighbor's bottom edge skew
-    adjacent_bottom_skew: float = 0.0  # Bottom neighbor's top edge skew
-    # Position of shared borders (middle of gutter)
+    adjacent_left_skew: float = 0.0
+    adjacent_right_skew: float = 0.0
+    adjacent_top_skew: float = 0.0
+    adjacent_bottom_skew: float = 0.0
+    # Position of shared borders (middle of gutter) — used for polygon base
     shared_left_x: float | None = None
     shared_right_x: float | None = None
     shared_top_y: float | None = None
     shared_bottom_y: float | None = None
-    # Shared border endpoints (for skewed borders)
-    # Format: (top_x, top_y, bottom_x, bottom_y) for vertical borders
-    #         (left_x, left_y, right_x, right_y) for horizontal borders
-    shared_left_endpoints: tuple[float, float, float, float] | None = None
-    shared_right_endpoints: tuple[float, float, float, float] | None = None
+    # Skew line descriptors for vertical shared borders.
+    # The line runs the full panel height; border segments are clipped per adjacency.
+    shared_left_skewline: "SkewLine | None" = None
+    shared_right_skewline: "SkewLine | None" = None
+    # For horizontal shared borders (top/bottom), keep simple endpoint tuples.
+    # Format: (left_x, left_y, right_x, right_y)
     shared_top_endpoints: tuple[float, float, float, float] | None = None
     shared_bottom_endpoints: tuple[float, float, float, float] | None = None
 
@@ -53,6 +76,13 @@ class LayoutEngine:
     def __init__(self, page: "Page"):
         self.page = page
         self.panels: list[LayoutedPanel] = []
+        # Inherited skew values from ancestor containers
+        self._inherited_skew: dict[str, float] = {
+            "skew_left": 0.0,
+            "skew_right": 0.0,
+            "skew_top": 0.0,
+            "skew_bottom": 0.0,
+        }
 
     def layout(self) -> list[LayoutedPanel]:
         """Compute layout for all panels.
@@ -228,14 +258,25 @@ class LayoutEngine:
             node: Node to layout
             rect: Assigned rectangle
         """
-        from ..ast import PanelNode, RowNode, ColNode
+        from ..ast import PanelNode, RowNode, ColNode, PanelAttrs
 
         if isinstance(node, PanelNode):
-            # Leaf node: record panel position with attributes
+            # Apply inherited skew to panels that don't set their own value
+            inh = self._inherited_skew
+            attrs = node.attrs
+            merged = PanelAttrs(
+                **{
+                    **attrs.model_dump(),
+                    "skew_left":   attrs.skew_left   if attrs.skew_left   != 0.0 else inh["skew_left"],
+                    "skew_right":  attrs.skew_right  if attrs.skew_right  != 0.0 else inh["skew_right"],
+                    "skew_top":    attrs.skew_top    if attrs.skew_top    != 0.0 else inh["skew_top"],
+                    "skew_bottom": attrs.skew_bottom if attrs.skew_bottom != 0.0 else inh["skew_bottom"],
+                }
+            )
             self.panels.append(LayoutedPanel(
                 id=node.id,
                 rect=rect,
-                attrs=node.attrs
+                attrs=merged
             ))
 
         elif isinstance(node, RowNode):
@@ -247,7 +288,9 @@ class LayoutEngine:
                 w=rect.w - node.margin_left - node.margin_right,
                 h=rect.h - node.margin_top - node.margin_bottom,
             )
+            prev = self._push_inherited_skew(node)
             self._layout_children(node.children, inner, "horizontal", child_gutter)
+            self._inherited_skew = prev
 
         elif isinstance(node, ColNode):
             # Col: layout children vertically
@@ -258,162 +301,169 @@ class LayoutEngine:
                 w=rect.w - node.margin_left - node.margin_right,
                 h=rect.h - node.margin_top - node.margin_bottom,
             )
+            prev = self._push_inherited_skew(node)
             self._layout_children(node.children, inner, "vertical", child_gutter)
+            self._inherited_skew = prev
+
+    def _push_inherited_skew(self, node: "RowNode | ColNode") -> dict[str, float]:
+        """Merge container skew with current inherited values; return previous state."""
+        prev = dict(self._inherited_skew)
+        new = dict(self._inherited_skew)
+        for key in ("skew_left", "skew_right", "skew_top", "skew_bottom"):
+            val = getattr(node, key, None)
+            if val is not None:
+                new[key] = val
+        self._inherited_skew = new
+        return prev
 
     def _resolve_shared_borders(self) -> None:
         """Detect shared borders between adjacent panels and disable redundant drawing.
 
-        Rule: For shared borders, only the left/top panel draws the border.
-        Panels are considered adjacent if they share the same position on one axis
-        and are close (within gutter distance) on the other axis.
+        Panels are considered left-right adjacent when they overlap on the Y axis and
+        are close (within gutter distance) on the X axis.  This handles the case where
+        a tall panel on the left shares its right edge with multiple shorter panels on
+        the right (each covering only a portion of that edge).
+
+        Top-bottom adjacency still requires the same X and width (panels in the same
+        column are always the same width).
         """
-        EPSILON = 0.01  # Tolerance for floating point comparison
-        max_gutter = 20.0  # Maximum expected gutter size
+        import math
+        EPSILON = 0.01
+        max_gutter = 20.0
 
         for i, panel_a in enumerate(self.panels):
             for panel_b in self.panels[i+1:]:
                 ra = panel_a.rect
                 rb = panel_b.rect
 
-                # Check if panels are vertically adjacent (left-right)
-                # Same Y position and height, close in X direction
-                if (abs(ra.y - rb.y) < EPSILON and
-                    abs(ra.h - rb.h) < EPSILON):
-                    # Check if panel_a is to the left of panel_b
+                # ── Left-right adjacency ───────────────────────────────────────
+                # Panels overlap on Y if their Y ranges intersect with meaningful length.
+                overlap_top = max(ra.y, rb.y)
+                overlap_bottom = min(ra.y + ra.h, rb.y + rb.h)
+                y_overlap = overlap_bottom - overlap_top
+
+                if y_overlap > EPSILON:
+                    # panel_a is to the left of panel_b
                     gap = rb.x - (ra.x + ra.w)
                     if 0 <= gap < max_gutter:
-                        # panel_a's right border and panel_b's left border are shared
-                        # Store adjacent skew values for proper border calculation
-                        panel_a.adjacent_right_skew = panel_b.attrs.skew_left
-                        panel_b.adjacent_left_skew = panel_a.attrs.skew_right
-                        # If no skew, only panel_a draws to avoid double lines
-                        avg_skew = (panel_a.attrs.skew_right + panel_b.attrs.skew_left) / 2
-                        if avg_skew == 0:
-                            panel_b.draw_left = False
-                        # Shared border is in the middle of the gutter
-                        shared_x = ra.x + ra.w + gap / 2
-                        panel_a.shared_right_x = shared_x
-                        panel_b.shared_left_x = shared_x
-                        # Calculate shared border endpoints for skewed borders
-                        # Use average of both panels' skew values for parallel borders
-                        import math
-                        avg_skew = (panel_a.attrs.skew_right + panel_b.attrs.skew_left) / 2
-                        if avg_skew != 0:
-                            offset = (ra.h / 2) * math.tan(math.radians(avg_skew))
-                            # panel_a's right border (at ra.x + ra.w)
-                            panel_a_x = ra.x + ra.w
-                            panel_a_top_x = panel_a_x + offset
-                            panel_a_bottom_x = panel_a_x - offset
-                            # panel_b's left border (at rb.x)
-                            panel_b_x = rb.x
-                            panel_b_top_x = panel_b_x + offset
-                            panel_b_bottom_x = panel_b_x - offset
-                            top_y = ra.y
-                            bottom_y = ra.y + ra.h
-                            panel_a.shared_right_endpoints = (panel_a_top_x, top_y, panel_a_bottom_x, bottom_y)
-                            panel_b.shared_left_endpoints = (panel_b_top_x, top_y, panel_b_bottom_x, bottom_y)
-                    # Check if panel_b is to the left of panel_a
+                        self._link_lr(panel_a, panel_b, ra, rb, gap,
+                                      overlap_top, overlap_bottom)
+
+                    # panel_b is to the left of panel_a
                     gap = ra.x - (rb.x + rb.w)
                     if 0 <= gap < max_gutter:
-                        # panel_b's right border and panel_a's left border are shared
-                        # Store adjacent skew values
-                        panel_b.adjacent_right_skew = panel_a.attrs.skew_left
-                        panel_a.adjacent_left_skew = panel_b.attrs.skew_right
-                        # If no skew, only panel_b draws to avoid double lines
-                        avg_skew = (panel_b.attrs.skew_right + panel_a.attrs.skew_left) / 2
-                        if avg_skew == 0:
-                            panel_a.draw_left = False
-                        # Shared border is in the middle of the gutter
-                        shared_x = rb.x + rb.w + gap / 2
-                        panel_b.shared_right_x = shared_x
-                        panel_a.shared_left_x = shared_x
-                        # Calculate shared border endpoints for skewed borders
-                        import math
-                        avg_skew = (panel_b.attrs.skew_right + panel_a.attrs.skew_left) / 2
-                        if avg_skew != 0:
-                            offset = (rb.h / 2) * math.tan(math.radians(avg_skew))
-                            # panel_b's right border (at rb.x + rb.w)
-                            panel_b_x = rb.x + rb.w
-                            panel_b_top_x = panel_b_x + offset
-                            panel_b_bottom_x = panel_b_x - offset
-                            # panel_a's left border (at ra.x)
-                            panel_a_x = ra.x
-                            panel_a_top_x = panel_a_x + offset
-                            panel_a_bottom_x = panel_a_x - offset
-                            top_y = rb.y
-                            bottom_y = rb.y + rb.h
-                            panel_b.shared_right_endpoints = (panel_b_top_x, top_y, panel_b_bottom_x, bottom_y)
-                            panel_a.shared_left_endpoints = (panel_a_top_x, top_y, panel_a_bottom_x, bottom_y)
+                        self._link_lr(panel_b, panel_a, rb, ra, gap,
+                                      overlap_top, overlap_bottom)
 
-                # Check if panels are horizontally adjacent (top-bottom)
-                # Same X position and width, close in Y direction
+                # ── Top-bottom adjacency ───────────────────────────────────────
+                # Panels in the same column share the same x and width.
                 if (abs(ra.x - rb.x) < EPSILON and
-                    abs(ra.w - rb.w) < EPSILON):
-                    # Check if panel_a is above panel_b
+                        abs(ra.w - rb.w) < EPSILON):
+                    # panel_a is above panel_b
                     gap = rb.y - (ra.y + ra.h)
                     if 0 <= gap < max_gutter:
-                        # panel_a's bottom border and panel_b's top border are shared
-                        # Store adjacent skew values
-                        panel_a.adjacent_bottom_skew = panel_b.attrs.skew_top
-                        panel_b.adjacent_top_skew = panel_a.attrs.skew_bottom
-                        # If no skew on shared border AND both panels have no skew at all,
-                        # only panel_a draws to avoid double lines
-                        avg_skew = (panel_a.attrs.skew_bottom + panel_b.attrs.skew_top) / 2
-                        panel_b_has_any_skew = (panel_b.attrs.skew_left != 0 or panel_b.attrs.skew_right != 0 or
-                                                 panel_b.attrs.skew_top != 0 or panel_b.attrs.skew_bottom != 0)
-                        if avg_skew == 0 and not panel_b_has_any_skew:
-                            panel_b.draw_top = False
-                        # Shared border is in the middle of the gutter
-                        shared_y = ra.y + ra.h + gap / 2
-                        panel_a.shared_bottom_y = shared_y
-                        panel_b.shared_top_y = shared_y
-                        # Calculate shared border endpoints
-                        import math
-                        avg_skew = (panel_a.attrs.skew_bottom + panel_b.attrs.skew_top) / 2
-                        offset = (ra.w / 2) * math.tan(math.radians(avg_skew)) if avg_skew != 0 else 0
-                        # panel_a's bottom border (at ra.y + ra.h)
-                        panel_a_y = ra.y + ra.h
-                        panel_a_left_y = panel_a_y + offset
-                        panel_a_right_y = panel_a_y - offset
-                        # panel_b's top border (at rb.y)
-                        panel_b_y = rb.y
-                        panel_b_left_y = panel_b_y + offset
-                        panel_b_right_y = panel_b_y - offset
-                        left_x = ra.x
-                        right_x = ra.x + ra.w
-                        panel_a.shared_bottom_endpoints = (left_x, panel_a_left_y, right_x, panel_a_right_y)
-                        panel_b.shared_top_endpoints = (left_x, panel_b_left_y, right_x, panel_b_right_y)
-                    # Check if panel_b is above panel_a
+                        self._link_tb(panel_a, panel_b, ra, rb, gap)
+
+                    # panel_b is above panel_a
                     gap = ra.y - (rb.y + rb.h)
                     if 0 <= gap < max_gutter:
-                        # panel_b's bottom border and panel_a's top border are shared
-                        # Store adjacent skew values
-                        panel_b.adjacent_bottom_skew = panel_a.attrs.skew_top
-                        panel_a.adjacent_top_skew = panel_b.attrs.skew_bottom
-                        # If no skew on shared border AND both panels have no skew at all,
-                        # only panel_b draws to avoid double lines
-                        avg_skew = (panel_b.attrs.skew_bottom + panel_a.attrs.skew_top) / 2
-                        panel_a_has_any_skew = (panel_a.attrs.skew_left != 0 or panel_a.attrs.skew_right != 0 or
-                                                 panel_a.attrs.skew_top != 0 or panel_a.attrs.skew_bottom != 0)
-                        if avg_skew == 0 and not panel_a_has_any_skew:
-                            panel_a.draw_top = False
-                        # Shared border is in the middle of the gutter
-                        shared_y = rb.y + rb.h + gap / 2
-                        panel_b.shared_bottom_y = shared_y
-                        panel_a.shared_top_y = shared_y
-                        # Calculate shared border endpoints
-                        import math
-                        avg_skew = (panel_b.attrs.skew_bottom + panel_a.attrs.skew_top) / 2
-                        offset = (rb.w / 2) * math.tan(math.radians(avg_skew)) if avg_skew != 0 else 0
-                        # panel_b's bottom border (at rb.y + rb.h)
-                        panel_b_y = rb.y + rb.h
-                        panel_b_left_y = panel_b_y + offset
-                        panel_b_right_y = panel_b_y - offset
-                        # panel_a's top border (at ra.y)
-                        panel_a_y = ra.y
-                        panel_a_left_y = panel_a_y + offset
-                        panel_a_right_y = panel_a_y - offset
-                        left_x = rb.x
-                        right_x = rb.x + rb.w
-                        panel_b.shared_bottom_endpoints = (left_x, panel_b_left_y, right_x, panel_b_right_y)
-                        panel_a.shared_top_endpoints = (left_x, panel_a_left_y, right_x, panel_a_right_y)
+                        self._link_tb(panel_b, panel_a, rb, ra, gap)
+
+    # ── helpers ───────────────────────────────────────────────────────────────
+
+    def _link_lr(
+        self,
+        left: "LayoutedPanel",
+        right: "LayoutedPanel",
+        rl: "Rect",
+        rr: "Rect",
+        gap: float,
+        overlap_top: float,
+        overlap_bottom: float,
+    ) -> None:
+        """Register left-right shared border between `left` and `right`."""
+        left.adjacent_right_skew = right.attrs.skew_left
+        right.adjacent_left_skew = left.attrs.skew_right
+
+        skew_l = left.attrs.skew_right
+        skew_r = right.attrs.skew_left
+        # Use the non-zero value; if both are non-zero, average them for smooth join
+        if skew_l != 0 and skew_r != 0:
+            shared_skew = (skew_l + skew_r) / 2
+        else:
+            shared_skew = skew_l + skew_r  # one is 0, so this equals the non-zero one
+
+        shared_x = rl.x + rl.w + gap / 2
+        left.shared_right_x = shared_x
+        right.shared_left_x = shared_x
+
+        # Decide which side owns the shared border line.
+        # When the left panel has skew_right (skew_l != 0), it draws the line.
+        # When only the right panel has skew_left, its polygon edge IS the visual border.
+        ref_mid_y = (rl.y + rl.h / 2) if rl.h >= rr.h else (rr.y + rr.h / 2)
+
+        # Effective border widths for determining who draws the line
+        left_right_bw  = left.attrs.border_right  if left.attrs.border_right  is not None else left.attrs.border
+        right_left_bw  = right.attrs.border_left  if right.attrs.border_left  is not None else right.attrs.border
+        left_draws  = left_right_bw  > 0
+        right_draws = right_left_bw  > 0
+
+        # Use the gutter centre as the single reference x for both polygon corners.
+        # This ensures the owning panel's border line and the non-owning panel's
+        # polygon edge are evaluated at the same x, so they meet exactly.
+        border_x = shared_x  # gutter centre
+
+        if skew_l != 0:
+            # Left panel owns the shared border line.
+            right.draw_left = False
+            if left_draws:
+                left.shared_right_skewline  = SkewLine(border_x, ref_mid_y, skew_l)
+                right.shared_left_skewline  = SkewLine(border_x, ref_mid_y, skew_l)
+        else:
+            # Only right panel has skew — its polygon left edge is the visual border.
+            left.draw_right = False
+            if right_draws:
+                right.shared_left_skewline  = SkewLine(border_x, ref_mid_y, skew_r)
+                left.shared_right_skewline  = SkewLine(border_x, ref_mid_y, skew_r)
+
+    def _link_tb(
+        self,
+        top: "LayoutedPanel",
+        bottom: "LayoutedPanel",
+        rt: "Rect",
+        rb: "Rect",
+        gap: float,
+    ) -> None:
+        """Register top-bottom shared border between `top` and `bottom`."""
+        import math
+
+        top.adjacent_bottom_skew = bottom.attrs.skew_top
+        bottom.adjacent_top_skew = top.attrs.skew_bottom
+
+        skew_t = top.attrs.skew_bottom
+        skew_b = bottom.attrs.skew_top
+        if skew_t != 0 and skew_b != 0:
+            shared_skew = (skew_t + skew_b) / 2
+        else:
+            shared_skew = skew_t + skew_b  # one is 0
+
+        # Top panel always owns the shared border line; bottom panel suppresses its top.
+        bottom.draw_top = False
+
+        shared_y = rt.y + rt.h + gap / 2
+        top.shared_bottom_y = shared_y
+        bottom.shared_top_y = shared_y
+
+        offset = (rt.w / 2) * math.tan(math.radians(shared_skew)) if shared_skew != 0 else 0
+        left_x = rt.x
+        right_x = rt.x + rt.w
+
+        # Convention matches polygon corners: left end is raised (−offset), right end lowered (+offset)
+        top.shared_bottom_endpoints = (
+            left_x, shared_y - offset,
+            right_x, shared_y + offset,
+        )
+        bottom.shared_top_endpoints = (
+            left_x, shared_y - offset,
+            right_x, shared_y + offset,
+        )

@@ -99,160 +99,124 @@ class SVGRenderer:
 
         if has_skew:
             import math
+            from ..layout.slicing import SkewLine
 
-            # Calculate offsets for each corner based on edge skews
-            # When a vertical edge rotates, its endpoints shift horizontally
-            # When a horizontal edge rotates, its endpoints shift vertically
+            # ── Effective skew per edge ───────────────────────────────────────
+            # When both sides specify a skew, average them; otherwise use the non-zero one.
+            def _eff(own: float, adj: float) -> float:
+                if own != 0 and adj != 0:
+                    return (own + adj) / 2
+                return own + adj  # one is 0
 
-            # For shared borders, use the adjacent panel's skew value
-            # This ensures continuous borders across adjacent panels
+            left_skew   = _eff(attrs.skew_left,   panel.adjacent_left_skew)
+            right_skew  = _eff(attrs.skew_right,  panel.adjacent_right_skew)
+            top_skew    = _eff(attrs.skew_top,    panel.adjacent_top_skew)
+            bottom_skew = _eff(attrs.skew_bottom, panel.adjacent_bottom_skew)
 
-            # Effective skew for each edge (considering adjacent panels)
-            # For shared borders, use the average of both panels' skew values
-            # to ensure continuous, parallel borders
-            if panel.adjacent_left_skew != 0:
-                left_skew = (attrs.skew_left + panel.adjacent_left_skew) / 2
-            else:
-                left_skew = attrs.skew_left
-
-            if panel.adjacent_right_skew != 0:
-                right_skew = (attrs.skew_right + panel.adjacent_right_skew) / 2
-            else:
-                right_skew = attrs.skew_right
-
-            if panel.adjacent_top_skew != 0:
-                top_skew = (attrs.skew_top + panel.adjacent_top_skew) / 2
-            else:
-                top_skew = attrs.skew_top
-
-            if panel.adjacent_bottom_skew != 0:
-                bottom_skew = (attrs.skew_bottom + panel.adjacent_bottom_skew) / 2
-            else:
-                bottom_skew = attrs.skew_bottom
-
-            # Left edge rotation offset (affects top-left and bottom-left x)
-            left_offset_x = (r.h / 2) * math.tan(math.radians(left_skew)) if left_skew != 0 else 0
-            # Right edge rotation offset (affects top-right and bottom-right x)
-            right_offset_x = (r.h / 2) * math.tan(math.radians(right_skew)) if right_skew != 0 else 0
-            # Top edge rotation offset (affects top-left and top-right y)
-            top_offset_y = (r.w / 2) * math.tan(math.radians(top_skew)) if top_skew != 0 else 0
-            # Bottom edge rotation offset (affects bottom-left and bottom-right y)
-            bottom_offset_y = (r.w / 2) * math.tan(math.radians(bottom_skew)) if bottom_skew != 0 else 0
-
-            # Calculate corner positions after skew
-            # Use shared border positions when available (for adjacent panels)
-            left_edge_x = panel.shared_left_x if panel.shared_left_x is not None else r.x
-            right_edge_x = panel.shared_right_x if panel.shared_right_x is not None else r.x + r.w
-            top_edge_y = panel.shared_top_y if panel.shared_top_y is not None else r.y
+            # ── Edge base positions ───────────────────────────────────────────
+            # Left/right: use gutter centre x (shared_left/right_x) when adjacent.
+            # Top/bottom: use gutter centre y (shared_top/bottom_y) for both the
+            #   polygon corners and the border lines so slanted edges meet cleanly.
+            left_base_x   = panel.shared_left_x   if panel.shared_left_x   is not None else r.x
+            right_base_x  = panel.shared_right_x  if panel.shared_right_x  is not None else r.x + r.w
+            top_edge_y    = panel.shared_top_y    if panel.shared_top_y    is not None else r.y
             bottom_edge_y = panel.shared_bottom_y if panel.shared_bottom_y is not None else r.y + r.h
 
-            # Calculate corner positions
-            # Each corner is determined by the intersection of two edges
-            # Use shared endpoints only for the specific edge, not for the corner
+            # Skew offsets
+            top_offset_y    = (r.w / 2) * math.tan(math.radians(top_skew))    if top_skew    != 0 else 0
+            bottom_offset_y = (r.w / 2) * math.tan(math.radians(bottom_skew)) if bottom_skew != 0 else 0
+            own_left_offset  = (r.h / 2) * math.tan(math.radians(attrs.skew_left))  if attrs.skew_left  != 0 else 0
+            own_right_offset = (r.h / 2) * math.tan(math.radians(attrs.skew_right)) if attrs.skew_right != 0 else 0
 
-            # Top-left corner (intersection of left and top edges)
-            if panel.shared_left_endpoints:
-                tl_x = panel.shared_left_endpoints[0]
+            # ── Polygon corners ───────────────────────────────────────────────
+            # Left/right X: use shared skewline evaluated at the panel's own top/bottom
+            # (r.y, r.y+r.h) — not at gutter centre — so the polygon stays inside
+            # the horizontal gutter gap and doesn't bleed into the neighbour's space.
+            if panel.shared_left_skewline:
+                tl_x = panel.shared_left_skewline.x_at(r.y)
+                bl_x = panel.shared_left_skewline.x_at(r.y + r.h)
+            elif panel.shared_left_x is not None:
+                tl_x = bl_x = left_base_x
             else:
-                tl_x = left_edge_x - left_offset_x
+                tl_x = left_base_x - own_left_offset
+                bl_x = left_base_x + own_left_offset
 
-            if panel.shared_top_endpoints:
-                tl_y = panel.shared_top_endpoints[1]
+            if panel.shared_right_skewline:
+                tr_x = panel.shared_right_skewline.x_at(r.y)
+                br_x = panel.shared_right_skewline.x_at(r.y + r.h)
+            elif panel.shared_right_x is not None:
+                tr_x = br_x = right_base_x
             else:
-                tl_y = top_edge_y - top_offset_y
+                tr_x = right_base_x + own_right_offset
+                br_x = right_base_x - own_right_offset
 
-            # Top-right corner (intersection of right and top edges)
-            if panel.shared_right_endpoints:
-                tr_x = panel.shared_right_endpoints[0]
-            else:
-                tr_x = right_edge_x + right_offset_x
+            # Top/bottom Y: use gutter-centre edge (top_edge_y/bottom_edge_y) with
+            # the skew offset, matching the border line endpoints exactly.
+            tl_y = top_edge_y    - top_offset_y
+            tr_y = top_edge_y    + top_offset_y
+            br_y = bottom_edge_y + bottom_offset_y
+            bl_y = bottom_edge_y - bottom_offset_y
 
-            if panel.shared_top_endpoints:
-                tr_y = panel.shared_top_endpoints[3]
-            else:
-                tr_y = top_edge_y + top_offset_y
-
-            # Bottom-right corner (intersection of right and bottom edges)
-            if panel.shared_right_endpoints:
-                br_x = panel.shared_right_endpoints[2]
-            else:
-                br_x = right_edge_x - right_offset_x
-
-            if panel.shared_bottom_endpoints:
-                br_y = panel.shared_bottom_endpoints[3]
-            else:
-                br_y = bottom_edge_y + bottom_offset_y
-
-            # Bottom-left corner (intersection of left and bottom edges)
-            if panel.shared_left_endpoints:
-                bl_x = panel.shared_left_endpoints[2]
-            else:
-                bl_x = left_edge_x + left_offset_x
-
-            if panel.shared_bottom_endpoints:
-                bl_y = panel.shared_bottom_endpoints[1]
-            else:
-                bl_y = bottom_edge_y - bottom_offset_y
-
-            # Render background as polygon with adjusted corners
-            points = f"{tl_x},{tl_y} {tr_x},{tr_y} {br_x},{br_y} {bl_x},{bl_y}"
             ET.SubElement(g, "polygon", {
-                "points": points,
+                "points": f"{tl_x},{tl_y} {tr_x},{tr_y} {br_x},{br_y} {bl_x},{bl_y}",
                 "fill": attrs.background,
                 "stroke": "none",
             })
 
-            # Render borders individually (only if not shared with adjacent panel)
-            # Use individual border settings if specified, otherwise use general border
-            border_left_width = attrs.border_left if attrs.border_left is not None else attrs.border
-            border_right_width = attrs.border_right if attrs.border_right is not None else attrs.border
-            border_top_width = attrs.border_top if attrs.border_top is not None else attrs.border
+            # ── Border lines — use shared SkewLine when available ─────────────
+            border_left_width   = attrs.border_left   if attrs.border_left   is not None else attrs.border
+            border_right_width  = attrs.border_right  if attrs.border_right  is not None else attrs.border
+            border_top_width    = attrs.border_top    if attrs.border_top    is not None else attrs.border
             border_bottom_width = attrs.border_bottom if attrs.border_bottom is not None else attrs.border
 
-            # Left border
             if panel.draw_left and border_left_width > 0:
-                # Use polygon corner positions for the border
+                if panel.shared_left_skewline:
+                    sl = panel.shared_left_skewline
+                    lx1, ly1 = sl.x_at(r.y), r.y
+                    lx2, ly2 = sl.x_at(r.y + r.h), r.y + r.h
+                else:
+                    lx1, ly1, lx2, ly2 = tl_x, tl_y, bl_x, bl_y
                 ET.SubElement(g, "line", {
-                    "x1": str(tl_x),
-                    "y1": str(tl_y),
-                    "x2": str(bl_x),
-                    "y2": str(bl_y),
+                    "x1": str(lx1), "y1": str(ly1),
+                    "x2": str(lx2), "y2": str(ly2),
                     "stroke": attrs.border_color,
                     "stroke-width": str(border_left_width),
                 })
 
-            # Right border
             if panel.draw_right and border_right_width > 0:
-                # Use polygon corner positions for the border
+                if panel.shared_right_skewline:
+                    sl = panel.shared_right_skewline
+                    rx1, ry1 = sl.x_at(r.y), r.y
+                    rx2, ry2 = sl.x_at(r.y + r.h), r.y + r.h
+                else:
+                    rx1, ry1, rx2, ry2 = tr_x, tr_y, br_x, br_y
                 ET.SubElement(g, "line", {
-                    "x1": str(tr_x),
-                    "y1": str(tr_y),
-                    "x2": str(br_x),
-                    "y2": str(br_y),
+                    "x1": str(rx1), "y1": str(ry1),
+                    "x2": str(rx2), "y2": str(ry2),
                     "stroke": attrs.border_color,
                     "stroke-width": str(border_right_width),
                 })
 
-            # Top border
             if panel.draw_top and border_top_width > 0:
-                # Use polygon corner positions for the border
+                if panel.shared_top_endpoints:
+                    tx1, ty1, tx2, ty2 = panel.shared_top_endpoints
+                else:
+                    tx1, ty1, tx2, ty2 = tl_x, tl_y, tr_x, tr_y
                 ET.SubElement(g, "line", {
-                    "x1": str(tl_x),
-                    "y1": str(tl_y),
-                    "x2": str(tr_x),
-                    "y2": str(tr_y),
+                    "x1": str(tx1), "y1": str(ty1),
+                    "x2": str(tx2), "y2": str(ty2),
                     "stroke": attrs.border_color,
                     "stroke-width": str(border_top_width),
                 })
 
-            # Bottom border
             if panel.draw_bottom and border_bottom_width > 0:
-                # Use polygon corner positions for the border
+                if panel.shared_bottom_endpoints:
+                    bx1, by1, bx2, by2 = panel.shared_bottom_endpoints
+                else:
+                    bx1, by1, bx2, by2 = bl_x, bl_y, br_x, br_y
                 ET.SubElement(g, "line", {
-                    "x1": str(bl_x),
-                    "y1": str(bl_y),
-                    "x2": str(br_x),
-                    "y2": str(br_y),
+                    "x1": str(bx1), "y1": str(by1),
+                    "x2": str(bx2), "y2": str(by2),
                     "stroke": attrs.border_color,
                     "stroke-width": str(border_bottom_width),
                 })
@@ -339,6 +303,7 @@ class SVGRenderer:
                 "text-anchor": "middle",
                 "dominant-baseline": "middle",
                 "font-size": "4",
+                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
                 "fill": "#999999",
             }).text = attrs.label if attrs.label else panel.id
 
@@ -374,6 +339,7 @@ class SVGRenderer:
                 "text-anchor": "middle",
                 "dominant-baseline": "middle",
                 "font-size": "3",
+                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
                 "fill": "#666666",
             }).text = f"Image not found: {attrs.image}"
             return
@@ -419,6 +385,7 @@ class SVGRenderer:
                 "text-anchor": "middle",
                 "dominant-baseline": "middle",
                 "font-size": "3",
+                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
                 "fill": "#ff0000",
             }).text = f"Error: {str(e)}"
 
@@ -443,6 +410,7 @@ class SVGRenderer:
                 "y": str(r.y + 10),
                 "writing-mode": "vertical-rl",
                 "font-size": "8",
+                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
                 "fill": "#000000",
             })
         else:
@@ -451,6 +419,7 @@ class SVGRenderer:
                 "x": str(r.x + 10),
                 "y": str(r.y + 15),
                 "font-size": "8",
+                "font-family": "Hiragino Sans, Hiragino Kaku Gothic Pro, sans-serif",
                 "fill": "#000000",
             })
 
