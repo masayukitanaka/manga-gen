@@ -12,6 +12,100 @@ if TYPE_CHECKING:
 from ..layout.slicing import Rect
 
 
+def _clip_line_to_rect(
+    x1: float, y1: float, x2: float, y2: float,
+    xmin: float, ymin: float, xmax: float, ymax: float,
+) -> tuple[float, float, float, float] | None:
+    """Cohen-Sutherland line clipping to axis-aligned rectangle.
+
+    Returns clipped (x1,y1,x2,y2) or None if segment is entirely outside.
+    """
+    INSIDE, LEFT, RIGHT, BOTTOM, TOP = 0, 1, 2, 4, 8
+
+    def code(x: float, y: float) -> int:
+        c = INSIDE
+        if x < xmin: c |= LEFT
+        elif x > xmax: c |= RIGHT
+        if y < ymin: c |= TOP
+        elif y > ymax: c |= BOTTOM
+        return c
+
+    c1, c2 = code(x1, y1), code(x2, y2)
+
+    while True:
+        if not (c1 | c2):
+            return x1, y1, x2, y2
+        if c1 & c2:
+            return None
+        c = c1 if c1 else c2
+        dx = x2 - x1
+        dy = y2 - y1
+        if c & BOTTOM:
+            x = x1 + dx * (ymax - y1) / dy if dy else x1
+            y = ymax
+        elif c & TOP:
+            x = x1 + dx * (ymin - y1) / dy if dy else x1
+            y = ymin
+        elif c & RIGHT:
+            y = y1 + dy * (xmax - x1) / dx if dx else y1
+            x = xmax
+        else:
+            y = y1 + dy * (xmin - x1) / dx if dx else y1
+            x = xmin
+        if c == c1:
+            x1, y1, c1 = x, y, code(x, y)
+        else:
+            x2, y2, c2 = x, y, code(x, y)
+
+
+def _clip_polygon_to_rect(
+    pts: list[tuple[float, float]],
+    x_min: float, y_min: float, x_max: float, y_max: float,
+) -> list[tuple[float, float]]:
+    """Clip a convex polygon to an axis-aligned rectangle (Sutherland-Hodgman)."""
+    def _intersect(p1: tuple, p2: tuple, a: tuple, b: tuple) -> tuple[float, float]:
+        x1, y1 = p1; x2, y2 = p2; x3, y3 = a; x4, y4 = b
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        if abs(denom) < 1e-12:
+            return ((x1 + x2) / 2, (y1 + y2) / 2)
+        t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+        return (x1 + t * (x2 - x1), y1 + t * (y2 - y1))
+
+    def _clip_edge(poly: list, a: tuple, b: tuple, inside) -> list:
+        if not poly:
+            return []
+        out = []
+        prev = poly[-1]
+        for cur in poly:
+            if inside(cur):
+                if not inside(prev):
+                    out.append(_intersect(prev, cur, a, b))
+                out.append(cur)
+            elif inside(prev):
+                out.append(_intersect(prev, cur, a, b))
+            prev = cur
+        return out
+
+    poly = list(pts)
+    poly = _clip_edge(poly, (x_min, y_min), (x_min, y_max), lambda p: p[0] >= x_min)
+    poly = _clip_edge(poly, (x_max, y_min), (x_max, y_max), lambda p: p[0] <= x_max)
+    poly = _clip_edge(poly, (x_min, y_min), (x_max, y_min), lambda p: p[1] >= y_min)
+    poly = _clip_edge(poly, (x_min, y_max), (x_max, y_max), lambda p: p[1] <= y_max)
+    return poly
+
+
+def _panel_fill_polygon(
+    tl_x: float, tl_y: float,
+    tr_x: float, tr_y: float,
+    br_x: float, br_y: float,
+    bl_x: float, bl_y: float,
+    x_min: float, y_min: float, x_max: float, y_max: float,
+) -> list[tuple[float, float]]:
+    """Clip the panel trapezoid to its bounding rect using Sutherland-Hodgman."""
+    quad = [(tl_x, tl_y), (tr_x, tr_y), (br_x, br_y), (bl_x, bl_y)]
+    return _clip_polygon_to_rect(quad, x_min, y_min, x_max, y_max)
+
+
 class SVGRenderer:
     """Renders layouted panels to SVG with advanced features."""
 
@@ -60,20 +154,21 @@ class SVGRenderer:
             "fill": cfg.background,
         })
 
-        # Render each panel
+        # ClipPath definitions for panels with skewed borders
+        defs = ET.SubElement(svg, "defs")
+
+        # Two-pass rendering: backgrounds first, then borders on top.
+        # This ensures no panel's white background covers another panel's border line.
+        bg_group = ET.SubElement(svg, "g", {"id": "backgrounds"})
+        border_group = ET.SubElement(svg, "g", {"id": "borders"})
         for panel in self.panels:
-            self._render_panel(svg, panel)
+            self._render_panel(bg_group, border_group, panel, defs)
 
         # Convert to string
         return ET.tostring(svg, encoding="unicode")
 
-    def _render_panel(self, parent: ET.Element, panel: "LayoutedPanel") -> None:
-        """Render a single panel.
-
-        Args:
-            parent: Parent SVG element
-            panel: Panel to render
-        """
+    def _render_panel(self, bg_parent: ET.Element, border_parent: ET.Element, panel: "LayoutedPanel", defs: ET.Element | None = None) -> None:
+        """Render a single panel: background into bg_parent, borders into border_parent."""
         r = panel.rect
         attrs = panel.attrs
 
@@ -88,8 +183,10 @@ class SVGRenderer:
         # Use offset_rect for rendering
         r = offset_rect
 
-        # Create group for panel
-        g = ET.SubElement(parent, "g", {"id": panel.id})
+        # Background group (drawn first, before all borders)
+        g = ET.SubElement(bg_parent, "g", {"id": panel.id})
+        # Border group (drawn last, on top of all backgrounds)
+        gb = ET.SubElement(border_parent, "g", {"id": f"{panel.id}_borders"})
 
         # Check if panel has any edge skew (including adjacent panels)
         has_skew = (attrs.skew_left != 0 or attrs.skew_right != 0 or
@@ -99,7 +196,7 @@ class SVGRenderer:
 
         if has_skew:
             import math
-            from ..layout.slicing import SkewLine
+            from ..layout.slicing import SkewLine, SkewHLine
 
             # ── Effective skew per edge ───────────────────────────────────────
             # When both sides specify a skew, average them; otherwise use the non-zero one.
@@ -150,76 +247,110 @@ class SVGRenderer:
                 tr_x = right_base_x + own_right_offset
                 br_x = right_base_x - own_right_offset
 
-            # Top/bottom Y: use gutter-centre edge (top_edge_y/bottom_edge_y) with
-            # the skew offset, matching the border line endpoints exactly.
-            tl_y = top_edge_y    - top_offset_y
-            tr_y = top_edge_y    + top_offset_y
-            br_y = bottom_edge_y + bottom_offset_y
-            bl_y = bottom_edge_y - bottom_offset_y
+            # Top/bottom Y: use SkewHLine when available so both panels reference
+            # the same gutter-centre line, preserving the visible gutter gap.
+            if panel.shared_top_skewline:
+                tl_y = panel.shared_top_skewline.y_at(tl_x)
+                tr_y = panel.shared_top_skewline.y_at(tr_x)
+            else:
+                tl_y = r.y - top_offset_y
+                tr_y = r.y + top_offset_y
 
-            ET.SubElement(g, "polygon", {
-                "points": f"{tl_x},{tl_y} {tr_x},{tr_y} {br_x},{br_y} {bl_x},{bl_y}",
-                "fill": attrs.background,
-                "stroke": "none",
-            })
+            if panel.shared_bottom_skewline:
+                bl_y = panel.shared_bottom_skewline.y_at(bl_x)
+                br_y = panel.shared_bottom_skewline.y_at(br_x)
+            else:
+                br_y = r.y + r.h + bottom_offset_y
+                bl_y = r.y + r.h - bottom_offset_y
 
-            # ── Border lines — use shared SkewLine when available ─────────────
+            # ── Background: fill the clipped panel trapezoid ─────────────────
+            # The trapezoid corners (tl/tr/br/bl) may extend outside the panel's
+            # rect when the skew is steep.  Clip to rect so the fill never bleeds
+            # into the gutter or the neighbour's space.
+            poly_pts = _panel_fill_polygon(
+                tl_x, tl_y, tr_x, tr_y, br_x, br_y, bl_x, bl_y,
+                r.x, r.y, r.x + r.w, r.y + r.h,
+            )
+            if poly_pts:
+                points_str = " ".join(f"{x},{y}" for x, y in poly_pts)
+                ET.SubElement(g, "polygon", {
+                    "points": points_str,
+                    "fill": attrs.background, "stroke": "none",
+                })
+
+            # ── Border lines ──────────────────────────────────────────────────
             border_left_width   = attrs.border_left   if attrs.border_left   is not None else attrs.border
             border_right_width  = attrs.border_right  if attrs.border_right  is not None else attrs.border
             border_top_width    = attrs.border_top    if attrs.border_top    is not None else attrs.border
             border_bottom_width = attrs.border_bottom if attrs.border_bottom is not None else attrs.border
 
+            # Left/right skewlines must be clipped to the panel rect so they don't
+            # spill outside. Top/bottom slanted lines span the full panel width and
+            # are drawn without a clipPath so they are never cut short.
+            if defs is not None:
+                clip_id = f"clip_{panel.id}"
+                cp = ET.SubElement(defs, "clipPath", {"id": clip_id})
+                ET.SubElement(cp, "rect", {
+                    "x": str(r.x), "y": str(r.y),
+                    "width": str(r.w), "height": str(r.h),
+                })
+                gb.set("clip-path", f"url(#{clip_id})")
+
+            def _line(parent, x1, y1, x2, y2, width):
+                ET.SubElement(parent, "line", {
+                    "x1": str(x1), "y1": str(y1),
+                    "x2": str(x2), "y2": str(y2),
+                    "stroke": attrs.border_color,
+                    "stroke-width": str(width),
+                })
+
+            # Left/right borders.
+            # The Y extent of each vertical edge must be trimmed to where the slanted
+            # top/bottom borders intersect the left (or right) side of the panel.
+            # For the left edge: use shared_top_endpoints[1] (ty1) as the top Y and
+            # shared_bottom_endpoints[1] (by1) as the bottom Y.
+            # For the right edge: use shared_top_endpoints[3] (ty2) and
+            # shared_bottom_endpoints[3] (by2).
+            left_top_y    = panel.shared_top_endpoints[1]    if panel.shared_top_endpoints    else r.y
+            left_bottom_y = panel.shared_bottom_endpoints[1] if panel.shared_bottom_endpoints else r.y + r.h
+            right_top_y   = panel.shared_top_endpoints[3]    if panel.shared_top_endpoints    else r.y
+            right_bottom_y= panel.shared_bottom_endpoints[3] if panel.shared_bottom_endpoints else r.y + r.h
+
             if panel.draw_left and border_left_width > 0:
                 if panel.shared_left_skewline:
                     sl = panel.shared_left_skewline
-                    lx1, ly1 = sl.x_at(r.y), r.y
-                    lx2, ly2 = sl.x_at(r.y + r.h), r.y + r.h
+                    y1, y2 = panel.shared_left_skewline_y if panel.shared_left_skewline_y else (r.y, r.y + r.h)
+                    _line(border_parent, sl.x_at(y1), y1, sl.x_at(y2), y2, border_left_width)
                 else:
-                    lx1, ly1, lx2, ly2 = tl_x, tl_y, bl_x, bl_y
-                ET.SubElement(g, "line", {
-                    "x1": str(lx1), "y1": str(ly1),
-                    "x2": str(lx2), "y2": str(ly2),
-                    "stroke": attrs.border_color,
-                    "stroke-width": str(border_left_width),
-                })
+                    # Draw to border_parent so slanted top/bottom endpoint trimming
+                    # is not clipped by the panel's clipPath rect.
+                    _line(border_parent, r.x, left_top_y, r.x, left_bottom_y, border_left_width)
 
             if panel.draw_right and border_right_width > 0:
                 if panel.shared_right_skewline:
                     sl = panel.shared_right_skewline
-                    rx1, ry1 = sl.x_at(r.y), r.y
-                    rx2, ry2 = sl.x_at(r.y + r.h), r.y + r.h
+                    y1, y2 = panel.shared_right_skewline_y if panel.shared_right_skewline_y else (r.y, r.y + r.h)
+                    _line(border_parent, sl.x_at(y1), y1, sl.x_at(y2), y2, border_right_width)
                 else:
-                    rx1, ry1, rx2, ry2 = tr_x, tr_y, br_x, br_y
-                ET.SubElement(g, "line", {
-                    "x1": str(rx1), "y1": str(ry1),
-                    "x2": str(rx2), "y2": str(ry2),
-                    "stroke": attrs.border_color,
-                    "stroke-width": str(border_right_width),
-                })
+                    # Draw to border_parent so slanted top/bottom endpoint trimming
+                    # is not clipped by the panel's clipPath rect.
+                    _line(border_parent, r.x + r.w, right_top_y, r.x + r.w, right_bottom_y, border_right_width)
 
+            # Top/bottom: slanted lines drawn without clipPath so the full diagonal
+            # is always visible across the entire panel width.
             if panel.draw_top and border_top_width > 0:
                 if panel.shared_top_endpoints:
                     tx1, ty1, tx2, ty2 = panel.shared_top_endpoints
                 else:
                     tx1, ty1, tx2, ty2 = tl_x, tl_y, tr_x, tr_y
-                ET.SubElement(g, "line", {
-                    "x1": str(tx1), "y1": str(ty1),
-                    "x2": str(tx2), "y2": str(ty2),
-                    "stroke": attrs.border_color,
-                    "stroke-width": str(border_top_width),
-                })
+                _line(border_parent, tx1, ty1, tx2, ty2, border_top_width)
 
             if panel.draw_bottom and border_bottom_width > 0:
                 if panel.shared_bottom_endpoints:
                     bx1, by1, bx2, by2 = panel.shared_bottom_endpoints
                 else:
                     bx1, by1, bx2, by2 = bl_x, bl_y, br_x, br_y
-                ET.SubElement(g, "line", {
-                    "x1": str(bx1), "y1": str(by1),
-                    "x2": str(bx2), "y2": str(by2),
-                    "stroke": attrs.border_color,
-                    "stroke-width": str(border_bottom_width),
-                })
+                _line(border_parent, bx1, by1, bx2, by2, border_bottom_width)
         else:
             # Render as rectangle (no skew)
             # Check if individual border control is needed
@@ -229,64 +360,60 @@ class SVGRenderer:
                                      attrs.border_right is not None)
 
             if has_individual_borders:
-                # Render background without stroke
                 ET.SubElement(g, "rect", {
-                    "x": str(r.x),
-                    "y": str(r.y),
-                    "width": str(r.w),
-                    "height": str(r.h),
-                    "fill": attrs.background,
-                    "stroke": "none",
+                    "x": str(r.x), "y": str(r.y),
+                    "width": str(r.w), "height": str(r.h),
+                    "fill": attrs.background, "stroke": "none",
                 })
 
-                # Render individual borders
                 border_left_width = attrs.border_left if attrs.border_left is not None else attrs.border
                 border_right_width = attrs.border_right if attrs.border_right is not None else attrs.border
                 border_top_width = attrs.border_top if attrs.border_top is not None else attrs.border
                 border_bottom_width = attrs.border_bottom if attrs.border_bottom is not None else attrs.border
 
                 if border_left_width > 0:
-                    ET.SubElement(g, "line", {
+                    ET.SubElement(gb, "line", {
                         "x1": str(r.x), "y1": str(r.y),
                         "x2": str(r.x), "y2": str(r.y + r.h),
                         "stroke": attrs.border_color,
                         "stroke-width": str(border_left_width),
                     })
-
                 if border_right_width > 0:
-                    ET.SubElement(g, "line", {
+                    ET.SubElement(gb, "line", {
                         "x1": str(r.x + r.w), "y1": str(r.y),
                         "x2": str(r.x + r.w), "y2": str(r.y + r.h),
                         "stroke": attrs.border_color,
                         "stroke-width": str(border_right_width),
                     })
-
                 if border_top_width > 0:
-                    ET.SubElement(g, "line", {
+                    ET.SubElement(gb, "line", {
                         "x1": str(r.x), "y1": str(r.y),
                         "x2": str(r.x + r.w), "y2": str(r.y),
                         "stroke": attrs.border_color,
                         "stroke-width": str(border_top_width),
                     })
-
                 if border_bottom_width > 0:
-                    ET.SubElement(g, "line", {
+                    ET.SubElement(gb, "line", {
                         "x1": str(r.x), "y1": str(r.y + r.h),
                         "x2": str(r.x + r.w), "y2": str(r.y + r.h),
                         "stroke": attrs.border_color,
                         "stroke-width": str(border_bottom_width),
                     })
             else:
-                # Render as simple rectangle with uniform border
+                # Split rect into background fill + border line for two-pass ordering
                 ET.SubElement(g, "rect", {
-                    "x": str(r.x),
-                    "y": str(r.y),
-                    "width": str(r.w),
-                    "height": str(r.h),
-                    "fill": attrs.background,
-                    "stroke": attrs.border_color,
-                    "stroke-width": str(attrs.border),
+                    "x": str(r.x), "y": str(r.y),
+                    "width": str(r.w), "height": str(r.h),
+                    "fill": attrs.background, "stroke": "none",
                 })
+                if attrs.border > 0:
+                    ET.SubElement(gb, "rect", {
+                        "x": str(r.x), "y": str(r.y),
+                        "width": str(r.w), "height": str(r.h),
+                        "fill": "none",
+                        "stroke": attrs.border_color,
+                        "stroke-width": str(attrs.border),
+                    })
 
         # Render image if specified
         if attrs.image:

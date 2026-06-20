@@ -41,6 +41,25 @@ class SkewLine:
 
 
 @dataclass
+class SkewHLine:
+    """A skewed horizontal border line.
+
+    Passes through (mid_x, base_y) at the given angle.
+    y_at(x) computes the Y position at horizontal position x.
+    Analogous to SkewLine but for horizontal borders (top/bottom).
+    """
+    base_y: float      # Y of the gutter centre at mid_x
+    mid_x: float       # X reference (midpoint of panel width)
+    skew_angle: float  # degrees — positive = right side lower
+
+    def y_at(self, x: float) -> float:
+        import math
+        if self.skew_angle == 0.0:
+            return self.base_y
+        return self.base_y + (x - self.mid_x) * math.tan(math.radians(self.skew_angle))
+
+
+@dataclass
 class LayoutedPanel:
     """A panel with computed layout (absolute coordinates)."""
     id: str
@@ -61,9 +80,14 @@ class LayoutedPanel:
     shared_top_y: float | None = None
     shared_bottom_y: float | None = None
     # Skew line descriptors for vertical shared borders.
-    # The line runs the full panel height; border segments are clipped per adjacency.
     shared_left_skewline: "SkewLine | None" = None
     shared_right_skewline: "SkewLine | None" = None
+    # Y range over which the left/right skewline is valid (the panel overlap span).
+    shared_left_skewline_y: "tuple[float, float] | None" = None
+    shared_right_skewline_y: "tuple[float, float] | None" = None
+    # Skew line descriptors for horizontal shared borders (top/bottom).
+    shared_top_skewline: "SkewHLine | None" = None
+    shared_bottom_skewline: "SkewHLine | None" = None
     # For horizontal shared borders (top/bottom), keep simple endpoint tuples.
     # Format: (left_x, left_y, right_x, right_y)
     shared_top_endpoints: tuple[float, float, float, float] | None = None
@@ -419,12 +443,28 @@ class LayoutEngine:
             if left_draws:
                 left.shared_right_skewline  = SkewLine(border_x, ref_mid_y, skew_l)
                 right.shared_left_skewline  = SkewLine(border_x, ref_mid_y, skew_l)
+                # Owning panel: expand Y range to cover all neighbors (union).
+                prev = left.shared_right_skewline_y
+                left.shared_right_skewline_y = (
+                    min(prev[0], overlap_top) if prev else overlap_top,
+                    max(prev[1], overlap_bottom) if prev else overlap_bottom,
+                )
+                # Mirroring panel: use its own overlap range.
+                right.shared_left_skewline_y = (overlap_top, overlap_bottom)
         else:
             # Only right panel has skew — its polygon left edge is the visual border.
             left.draw_right = False
             if right_draws:
                 right.shared_left_skewline  = SkewLine(border_x, ref_mid_y, skew_r)
                 left.shared_right_skewline  = SkewLine(border_x, ref_mid_y, skew_r)
+                # Owning panel: expand Y range to cover all neighbors (union).
+                prev = right.shared_left_skewline_y
+                right.shared_left_skewline_y = (
+                    min(prev[0], overlap_top) if prev else overlap_top,
+                    max(prev[1], overlap_bottom) if prev else overlap_bottom,
+                )
+                # Mirroring panel: use its own overlap range.
+                left.shared_right_skewline_y = (overlap_top, overlap_bottom)
 
     def _link_tb(
         self,
@@ -447,8 +487,11 @@ class LayoutEngine:
         else:
             shared_skew = skew_t + skew_b  # one is 0
 
-        # Top panel always owns the shared border line; bottom panel suppresses its top.
-        bottom.draw_top = False
+        # Top panel owns the shared border line.
+        # For a skewed gutter, both panels draw their own slanted edge (they differ).
+        # For a flat gutter, suppress the bottom panel's top to avoid double-drawing.
+        if shared_skew == 0:
+            bottom.draw_top = False
 
         shared_y = rt.y + rt.h + gap / 2
         top.shared_bottom_y = shared_y
@@ -458,12 +501,20 @@ class LayoutEngine:
         left_x = rt.x
         right_x = rt.x + rt.w
 
-        # Convention matches polygon corners: left end is raised (−offset), right end lowered (+offset)
+        if shared_skew != 0:
+            mid_x = rt.x + rt.w / 2
+            # Top panel polygon: bottom edge evaluated at rt.y+rt.h (top side of gutter)
+            top.shared_bottom_skewline = SkewHLine(rt.y + rt.h, mid_x, shared_skew)
+            # Bottom panel polygon: top edge evaluated at rb.y (bottom side of gutter)
+            bottom.shared_top_skewline = SkewHLine(rb.y, mid_x, shared_skew)
+
+        # Border lines: each panel draws its own slanted edge at its rect boundary.
+        # top panel bottom edge at rt.y+rt.h; bottom panel top edge at rb.y.
         top.shared_bottom_endpoints = (
-            left_x, shared_y - offset,
-            right_x, shared_y + offset,
+            left_x, rt.y + rt.h - offset,
+            right_x, rt.y + rt.h + offset,
         )
         bottom.shared_top_endpoints = (
-            left_x, shared_y - offset,
-            right_x, shared_y + offset,
+            left_x, rb.y - offset,
+            right_x, rb.y + offset,
         )
