@@ -393,6 +393,49 @@ class LayoutEngine:
                     if 0 <= gap < max_gutter:
                         self._link_tb(panel_b, panel_a, rb, ra, gap)
 
+        # ── Unify mid_y for collinear skewlines ───────────────────────────────
+        # When the same diagonal edge spans multiple row-pairs (e.g. a col with
+        # skew_right and two child rows), each pair gets its own mid_y, producing
+        # two different lines instead of one continuous diagonal.  Fix by grouping
+        # all skewlines that share the same base_x and skew_angle and setting them
+        # all to the mid_y of the first (topmost) segment.
+        self._unify_skewline_mid_y()
+
+    def _unify_skewline_mid_y(self) -> None:
+        """Ensure collinear skewlines (same base_x + angle) share one mid_y."""
+        from collections import defaultdict
+
+        # Collect (side, panel) keyed by (base_x, angle)
+        right_groups: dict[tuple, list] = defaultdict(list)
+        left_groups:  dict[tuple, list] = defaultdict(list)
+
+        for p in self.panels:
+            if p.shared_right_skewline:
+                sl = p.shared_right_skewline
+                right_groups[(sl.base_x, sl.skew_angle)].append(p)
+            if p.shared_left_skewline:
+                sl = p.shared_left_skewline
+                left_groups[(sl.base_x, sl.skew_angle)].append(p)
+
+        for key, panels in right_groups.items():
+            if len(panels) < 2:
+                continue
+            # Sort by panel top Y; use the first panel's mid_y for all
+            panels.sort(key=lambda p: p.rect.y)
+            canonical_mid_y = panels[0].shared_right_skewline.mid_y
+            for p in panels[1:]:
+                sl = p.shared_right_skewline
+                p.shared_right_skewline = SkewLine(sl.base_x, canonical_mid_y, sl.skew_angle)
+
+        for key, panels in left_groups.items():
+            if len(panels) < 2:
+                continue
+            panels.sort(key=lambda p: p.rect.y)
+            canonical_mid_y = panels[0].shared_left_skewline.mid_y
+            for p in panels[1:]:
+                sl = p.shared_left_skewline
+                p.shared_left_skewline = SkewLine(sl.base_x, canonical_mid_y, sl.skew_angle)
+
     # ── helpers ───────────────────────────────────────────────────────────────
 
     def _link_lr(
@@ -421,11 +464,6 @@ class LayoutEngine:
         left.shared_right_x = rl.x + rl.w   # left panel's own right boundary
         right.shared_left_x = rr.x           # right panel's own left boundary
 
-        # Decide which side owns the shared border line.
-        # When the left panel has skew_right (skew_l != 0), it draws the line.
-        # When only the right panel has skew_left, its polygon edge IS the visual border.
-        ref_mid_y = (rl.y + rl.h / 2) if rl.h >= rr.h else (rr.y + rr.h / 2)
-
         # Effective border widths for determining who draws the line
         left_right_bw  = left.attrs.border_right  if left.attrs.border_right  is not None else left.attrs.border
         right_left_bw  = right.attrs.border_left  if right.attrs.border_left  is not None else right.attrs.border
@@ -443,22 +481,34 @@ class LayoutEngine:
 
         if effective_skew != 0:
             if left_draws:
-                left.shared_right_skewline = SkewLine(left_border_x, ref_mid_y, effective_skew)
-                prev = left.shared_right_skewline_y
+                prev_sl = left.shared_right_skewline
+                if prev_sl is not None and prev_sl.base_x == left_border_x and prev_sl.skew_angle == effective_skew:
+                    # Reuse the existing skewline's mid_y so all segments of this
+                    # edge form one continuous diagonal line across multiple row pairs.
+                    ref_mid_y_left = prev_sl.mid_y
+                else:
+                    ref_mid_y_left = (rl.y + rl.h / 2) if rl.h >= rr.h else (rr.y + rr.h / 2)
+                left.shared_right_skewline = SkewLine(left_border_x, ref_mid_y_left, effective_skew)
+                prev_y = left.shared_right_skewline_y
                 left.shared_right_skewline_y = (
-                    min(prev[0], overlap_top) if prev else overlap_top,
-                    max(prev[1], overlap_bottom) if prev else overlap_bottom,
+                    min(prev_y[0], overlap_top) if prev_y else overlap_top,
+                    max(prev_y[1], overlap_bottom) if prev_y else overlap_bottom,
                 )
             if right_draws:
-                right.shared_left_skewline = SkewLine(right_border_x, ref_mid_y, effective_skew)
-                prev = right.shared_left_skewline_y
+                prev_sl = right.shared_left_skewline
+                if prev_sl is not None and prev_sl.base_x == right_border_x and prev_sl.skew_angle == effective_skew:
+                    ref_mid_y_right = prev_sl.mid_y
+                else:
+                    ref_mid_y_right = (rl.y + rl.h / 2) if rl.h >= rr.h else (rr.y + rr.h / 2)
+                right.shared_left_skewline = SkewLine(right_border_x, ref_mid_y_right, effective_skew)
+                prev_y = right.shared_left_skewline_y
                 new_top = overlap_top
                 new_bottom = overlap_bottom
-                if prev:
+                if prev_y:
                     # Bridge the gutter gap between the previous neighbor's range and
                     # this neighbor's range so the diagonal is continuous.
-                    new_top = min(prev[0], overlap_top)
-                    new_bottom = max(prev[1], overlap_bottom)
+                    new_top = min(prev_y[0], overlap_top)
+                    new_bottom = max(prev_y[1], overlap_bottom)
                 elif rl.y < rr.y:
                     # The left panel starts above this right panel — extend the range
                     # upward through the gutter so the diagonal meets the horizontal border.
@@ -487,8 +537,8 @@ class LayoutEngine:
             shared_skew = skew_t + skew_b  # one is 0
 
         # Top panel owns the shared border line.
-        # For a skewed gutter, both panels draw their own slanted edge (they differ).
         # For a flat gutter, suppress the bottom panel's top to avoid double-drawing.
+        # For a slanted gutter, both panels draw their own edge (they are at different Y).
         if shared_skew == 0:
             bottom.draw_top = False
 

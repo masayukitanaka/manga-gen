@@ -1,0 +1,25 @@
+// Action scene with skewed borders for dynamic effect
+
+page {
+  gutter: 6
+  border: 0.5
+
+  row {
+    col {
+      skew_right: -6
+      panel left1{}
+    }
+    col {
+      row {
+        panel right1{
+          skew_bottom: 6
+        }
+      }
+      row {
+        panel right2{
+          offset_bottom: 10
+        }
+      }
+    }
+  }
+}
