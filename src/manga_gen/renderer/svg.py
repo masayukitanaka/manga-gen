@@ -328,10 +328,11 @@ class SVGRenderer:
                 if panel.shared_left_skewline:
                     sl = panel.shared_left_skewline
                     y1, y2 = panel.shared_left_skewline_y if panel.shared_left_skewline_y else (r.y, r.y + r.h)
-                    # Clamp to panel rect top: if the skewline bridges the gutter,
-                    # don't draw it above r.y — the neighbor's bottom border already
-                    # covers that segment, and drawing above r.y creates a wedge gap.
+                    # Clamp top to panel rect: don't draw above r.y (wedge gap prevention).
                     y1 = max(y1, r.y)
+                    # Extend bottom to offset rect bottom: offset_bottom expands r.y+r.h
+                    # beyond the layout rect, so the skewline must follow.
+                    y2 = max(y2, r.y + r.h)
                     _line(border_parent, sl.x_at(y1), y1, sl.x_at(y2), y2, border_left_width)
                 else:
                     # Draw to border_parent so slanted top/bottom endpoint trimming
@@ -342,6 +343,8 @@ class SVGRenderer:
                 if panel.shared_right_skewline:
                     sl = panel.shared_right_skewline
                     y1, y2 = panel.shared_right_skewline_y if panel.shared_right_skewline_y else (r.y, r.y + r.h)
+                    # Extend bottom to offset rect bottom (same reason as left side).
+                    y2 = max(y2, r.y + r.h)
                     _line(border_parent, sl.x_at(y1), y1, sl.x_at(y2), y2, border_right_width)
                 else:
                     # Draw to border_parent so slanted top/bottom endpoint trimming
