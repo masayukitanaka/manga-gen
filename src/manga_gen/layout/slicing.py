@@ -380,9 +380,10 @@ class LayoutEngine:
                                       overlap_top, overlap_bottom)
 
                 # ── Top-bottom adjacency ───────────────────────────────────────
-                # Panels in the same column share the same x and width.
-                if (abs(ra.x - rb.x) < EPSILON and
-                        abs(ra.w - rb.w) < EPSILON):
+                # Panels are top-bottom adjacent when their X ranges overlap
+                # (handles both same-width columns and wide-panel-over-multiple-columns).
+                x_overlap = min(ra.x + ra.w, rb.x + rb.w) - max(ra.x, rb.x)
+                if x_overlap > EPSILON:
                     # panel_a is above panel_b
                     gap = rb.y - (ra.y + ra.h)
                     if 0 <= gap < max_gutter:
@@ -400,6 +401,60 @@ class LayoutEngine:
         # all skewlines that share the same base_x and skew_angle and setting them
         # all to the mid_y of the first (topmost) segment.
         self._unify_skewline_mid_y()
+
+        # ── Adjust vertical skewline_y when a slanted horizontal gutter crosses it ──
+        # When a bottom panel has both a shared_top_skewline (slanted horizontal gutter
+        # from the panel above) and a shared vertical skewline on its right or left,
+        # the vertical skewline's draw range must start at the intersection of those two
+        # lines so the corner closes cleanly (no triangular gap).
+        self._adjust_skewline_y_for_slanted_top()
+
+    def _adjust_skewline_y_for_slanted_top(self) -> None:
+        """For panels with both a slanted top gutter and a vertical skewline,
+        set the vertical skewline's top Y to the intersection of the two lines."""
+        import math
+
+        def _intersect(hsl: "SkewHLine", vsl: "SkewLine"):
+            tan_h = math.tan(math.radians(hsl.skew_angle))
+            tan_v = math.tan(math.radians(vsl.skew_angle))
+            denom = 1 - tan_h * tan_v
+            if abs(denom) < 1e-9:
+                return None
+            xi = (vsl.base_x + (hsl.base_y - vsl.mid_y) * tan_v
+                  - hsl.mid_x * tan_h * tan_v) / denom
+            yi = hsl.base_y + (xi - hsl.mid_x) * tan_h
+            return yi
+
+        for p in self.panels:
+            # Adjust bottom panel's vertical skewline top to the intersection
+            # with this panel's own top border (base_y = rb.y).
+            hsl_top = p.shared_top_skewline
+            if hsl_top is not None:
+                if p.shared_right_skewline and p.shared_right_skewline_y:
+                    yi = _intersect(hsl_top, p.shared_right_skewline)
+                    if yi is not None:
+                        old_top, old_bot = p.shared_right_skewline_y
+                        p.shared_right_skewline_y = (yi, old_bot)
+                if p.shared_left_skewline and p.shared_left_skewline_y:
+                    yi = _intersect(hsl_top, p.shared_left_skewline)
+                    if yi is not None:
+                        old_top, old_bot = p.shared_left_skewline_y
+                        p.shared_left_skewline_y = (yi, old_bot)
+
+            # Adjust top panel's vertical skewline bottom to the intersection
+            # with its own bottom border (base_y = rt.y+rt.h, gutter top side).
+            hsl_bot = p.shared_bottom_skewline
+            if hsl_bot is not None:
+                if p.shared_right_skewline and p.shared_right_skewline_y:
+                    yi = _intersect(hsl_bot, p.shared_right_skewline)
+                    if yi is not None:
+                        old_top, old_bot = p.shared_right_skewline_y
+                        p.shared_right_skewline_y = (old_top, yi)
+                if p.shared_left_skewline and p.shared_left_skewline_y:
+                    yi = _intersect(hsl_bot, p.shared_left_skewline)
+                    if yi is not None:
+                        old_top, old_bot = p.shared_left_skewline_y
+                        p.shared_left_skewline_y = (old_top, yi)
 
     def _unify_skewline_mid_y(self) -> None:
         """Ensure collinear skewlines (same base_x + angle) share one mid_y."""
@@ -537,9 +592,16 @@ class LayoutEngine:
             shared_skew = skew_t + skew_b  # one is 0
 
         # Top panel owns the shared border line.
-        # For a flat gutter, suppress the bottom panel's top to avoid double-drawing.
-        # For a slanted gutter, both panels draw their own edge (they are at different Y).
-        if shared_skew == 0:
+        # Suppress the bottom panel's top border whenever the top panel's X span
+        # fully covers the bottom panel's X span — the top panel already draws
+        # the full slanted line, so the bottom panel must not redraw its portion.
+        EPSILON2 = 0.01
+        top_covers_bottom = (rt.x <= rb.x + EPSILON2) and (rt.x + rt.w >= rb.x + rb.w - EPSILON2)
+        # For slanted gutters (shared_skew != 0) the top panel's bottom border and
+        # the bottom panel's top border lie on different parallel lines separated by
+        # the gutter width — both must be drawn. Only suppress for flat gutters where
+        # both panels would draw the exact same line.
+        if top_covers_bottom and shared_skew == 0:
             bottom.draw_top = False
 
         shared_y = rt.y + rt.h + gap / 2
@@ -556,14 +618,44 @@ class LayoutEngine:
             top.shared_bottom_skewline = SkewHLine(rt.y + rt.h, mid_x, shared_skew)
             # Bottom panel polygon: top edge evaluated at rb.y (bottom side of gutter)
             bottom.shared_top_skewline = SkewHLine(rb.y, mid_x, shared_skew)
+            # Store the top panel's border skewline on the bottom panel so that
+            # _adjust_skewline_y_for_slanted_top can compute the correct intersection
+            # with vertical skewlines (needs base_y=rt.y+rt.h, not rb.y).
+            bottom._top_border_skewline = SkewHLine(rt.y + rt.h, mid_x, shared_skew)
 
-        # Border lines: each panel draws its own slanted edge at its rect boundary.
-        # top panel bottom edge at rt.y+rt.h; bottom panel top edge at rb.y.
+        # Border lines: top panel uses its own full-width endpoints.
         top.shared_bottom_endpoints = (
             left_x, rt.y + rt.h - offset,
             right_x, rt.y + rt.h + offset,
         )
+        bot_left_x = rb.x
+        bot_right_x = rb.x + rb.w
+        if shared_skew != 0:
+            # Bottom panel's top border lies on the gutter-bottom line (base_y=rb.y),
+            # parallel to the top panel's bottom border (base_y=rt.y+rt.h).
+            sl_bot = SkewHLine(rb.y, rt.x + rt.w / 2, shared_skew)
+            bot_left_y = sl_bot.y_at(bot_left_x)
+            bot_right_y = sl_bot.y_at(bot_right_x)
+
+            # Extend the top panel's vertical skewline bottom to meet the bottom
+            # panel's top border (base_y=rb.y) so the diagonal corner closes cleanly.
+            # This must happen here (before _adjust_skewline_y_for_slanted_top) so
+            # the gutter-bottom line is used rather than the gutter-top line.
+            def _intersect_vsl(hsl, vsl):
+                tan_h = math.tan(math.radians(hsl.skew_angle))
+                tan_v = math.tan(math.radians(vsl.skew_angle))
+                denom = 1 - tan_h * tan_v
+                if abs(denom) < 1e-9:
+                    return None
+                xi = (vsl.base_x + (hsl.base_y - vsl.mid_y) * tan_v
+                      - hsl.mid_x * tan_h * tan_v) / denom
+                yi = hsl.base_y + (xi - hsl.mid_x) * tan_h
+                return yi
+
+        else:
+            bot_left_y = rb.y
+            bot_right_y = rb.y
         bottom.shared_top_endpoints = (
-            left_x, rb.y - offset,
-            right_x, rb.y + offset,
+            bot_left_x, bot_left_y,
+            bot_right_x, bot_right_y,
         )

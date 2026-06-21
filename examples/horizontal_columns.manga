@@ -1,0 +1,44 @@
+// 見開きレイアウト
+// 巨大なアクションコマ + 下段の小コマ + 右側に縦長の人物コマ
+page jujutsu_spread {
+  size: 420x297
+  direction: rtl
+  gutter: 4
+  padding: 10
+  border: 0.5
+
+  row {
+    // 右列
+    col width: 25% {
+      panel action { 
+        skew_left: 8
+        offset_bottom: -20
+        border_right: 0
+      }
+    }
+
+    // 左列（広い方）
+    col {
+      row height: 72% {
+        skew_bottom: 10
+        panel action_car {
+          border_left: 0
+        }
+      }
+
+      // 下部: 小コマ横並び
+      row {
+        col margin_left: 10 {
+          panel enemy_closeup_lower {
+
+          }
+        }
+        col {
+          panel megumi_face {
+            border_left: 0
+          }
+        }
+      }
+    }
+  }
+}
