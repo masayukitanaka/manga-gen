@@ -21,6 +21,7 @@ class PageConfig(BaseModel):
     height_mm: float = 297.0
     direction: Literal["rtl", "ltr"] = "ltr"
     gutter: float = 5.0
+    gutter_color: str = "#ffffff"
     padding: float = 10.0
     background: str = "#ffffff"
     dpi: int = 300

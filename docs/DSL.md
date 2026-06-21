@@ -55,6 +55,7 @@ page main_layout {
 | `dpi` | number | `300` | Resolution for PNG output |
 | `border` | number (mm) | `1` | Default border thickness for all panels |
 | `border_color` | color | `"#000000"` | Default border color for all panels |
+| `gutter_color` | color | `"#ffffff"` | Color of gutters and page margins (areas outside panels) |
 
 #### Size Specifications
 
@@ -685,6 +686,27 @@ page {
 
 The gutter between the two columns is rendered as two parallel diagonal lines. The gutter between `right1` and `right2` inside the right column is rendered as a normal horizontal gap.
 
+### Example 10: Flashback Scene (Dark Gutter)
+
+Setting `gutter_color` to a dark color fills both the gutters between panels and the padding margins around the page with that color. This is the standard technique used in manga flashback or dream sequences.
+
+```manga
+page {
+  gutter: 6
+  padding: 10
+  border: 1
+  gutter_color: black   // All areas outside panels become black
+
+  row { panel scene1 {} }
+  row { panel scene2 {} }
+  row { panel scene3 {} }
+}
+```
+
+- `gutter_color` accepts both named colors (`black`, `gray`, `white`) and hex codes (`"#000000"`)
+- The default is `"#ffffff"` (white), matching normal manga pages
+- Panel backgrounds (`background`) remain independent — set `background: "#e0e0e0"` on individual panels to give them a gray tint for the flashback effect
+
 ---
 
 ## 7. Best Practices
@@ -763,5 +785,5 @@ Error: Unsupported image format: 'image.bmp'
 
 ---
 
-**MangaDSL Language Reference v1.0**
-Last updated: 2026-06-12
+**MangaDSL Language Reference v1.1**
+Last updated: 2026-06-20

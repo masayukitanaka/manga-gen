@@ -1,0 +1,10 @@
+// Flashback scene with dark gutter color
+
+page {
+  gutter: 6
+  gutter_color: black
+  border: 1
+
+  row { panel scene1 {} }
+  row { panel scene2 {} }
+}

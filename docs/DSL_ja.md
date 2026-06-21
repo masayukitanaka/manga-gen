@@ -55,6 +55,7 @@ page main_layout {
 | `dpi` | number | `300` | PNG出力時の解像度 |
 | `border` | number (mm) | `1` | 全パネルのデフォルト枠線の太さ |
 | `border_color` | color | `"#000000"` | 全パネルのデフォルト枠線色 |
+| `gutter_color` | color | `"#ffffff"` | コマ間（ガター）およびページマージン（コマ外）の色 |
 
 #### サイズ規定値
 
@@ -694,6 +695,27 @@ page {
 ```
 
 このとき、左列と右列の間のガターは傾いた2本の平行線で表現されます。右列内の `right1` と `right2` のコマ間は通常の水平ガターとして描画されます。
+
+### 例10: 回想シーン（黒ガター）
+
+`gutter_color` を暗い色にすると、コマ間のガターとページ外周のマージンが全て同色で塗られます。漫画の回想シーンや夢のシーンで使われる定番表現です。
+
+```manga
+page {
+  gutter: 6
+  padding: 10
+  border: 1
+  gutter_color: black   // コマ外のエリアを全て黒にする
+
+  row { panel scene1 {} }
+  row { panel scene2 {} }
+  row { panel scene3 {} }
+}
+```
+
+- `gutter_color` には色名（`black`, `gray`, `white`）も16進数（`"#000000"`）も使用可能
+- デフォルトは `"#ffffff"`（白）で、通常の漫画ページと同じ見た目
+- パネルの背景色（`background`）は独立して設定できる — 個別パネルに `background: "#e0e0e0"` を指定することで回想シーンらしいグレー調にできる
 
 ---
 

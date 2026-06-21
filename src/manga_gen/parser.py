@@ -88,6 +88,8 @@ class MangaTransformer(Transformer):
             self.page_config.padding = float(value)
         elif attr_name == "background":
             self.page_config.background = str(value).strip('"')
+        elif attr_name == "gutter_color":
+            self.page_config.gutter_color = str(value).strip('"')
         elif attr_name == "dpi":
             self.page_config.dpi = int(float(value))
         elif attr_name == "border":

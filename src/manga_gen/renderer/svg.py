@@ -145,13 +145,15 @@ class SVGRenderer:
                 "viewBox": f"0 0 {cfg.width_mm} {cfg.height_mm}",
             })
 
-        # Page background
+        # Page background: gutter_color fills the entire page (padding + gutters).
+        # Panel backgrounds painted on top cover the panel areas, leaving gutter_color
+        # visible in the padding margins and gutter gaps between panels.
         ET.SubElement(svg, "rect", {
             "x": "0",
             "y": "0",
             "width": str(cfg.width_mm),
             "height": str(cfg.height_mm),
-            "fill": cfg.background,
+            "fill": cfg.gutter_color,
         })
 
         # ClipPath definitions for panels with skewed borders

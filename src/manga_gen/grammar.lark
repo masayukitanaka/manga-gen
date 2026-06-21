@@ -15,7 +15,7 @@ page_attr: page_attr_key ":" SIZE_VALUE
 
 page_attr_key: CNAME | GUTTER_KW
 
-GUTTER_KW.3: "gutter"
+GUTTER_KW.3: /gutter(?![a-zA-Z0-9_])/
 
 // Layout statements
 statement: row_stmt | col_stmt | panel_stmt
