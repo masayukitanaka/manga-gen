@@ -401,10 +401,12 @@ class SVGRenderer:
                     sl = panel.shared_left_skewline
                     y1, y2 = panel.shared_left_skewline_y if panel.shared_left_skewline_y else (r.y, r.y + r.h)
                     y1 = max(y1, r.y)
-                    # When a slanted bottom gutter exists the skewline must extend below
-                    # r.y+r.h to meet the gutter corner — don't clamp in that case.
+                    # shared_bottom_skewline: skewline extends to the corner intersection
+                    # (set by _adjust_skewline_y_for_slanted_top) — don't clamp.
+                    # No shared_bottom_skewline: always use r.y+r.h (offset_rect bottom)
+                    # so offset_bottom expansions are fully covered.
                     if not panel.shared_bottom_skewline:
-                        y2 = min(y2, r.y + r.h)
+                        y2 = r.y + r.h
                     x1_sl, x2_sl = sl.x_at(y1), sl.x_at(y2)
                     _line(border_parent, x1_sl, y1, x2_sl, y2, border_left_width)
                 else:
@@ -417,10 +419,8 @@ class SVGRenderer:
                     sl = panel.shared_right_skewline
                     y1, y2 = panel.shared_right_skewline_y if panel.shared_right_skewline_y else (r.y, r.y + r.h)
                     y1 = max(y1, r.y)
-                    # When a slanted bottom gutter exists the skewline must extend below
-                    # r.y+r.h to meet the gutter corner — don't clamp in that case.
                     if not panel.shared_bottom_skewline:
-                        y2 = min(y2, r.y + r.h)
+                        y2 = r.y + r.h
                     x1_sl, x2_sl = sl.x_at(y1), sl.x_at(y2)
                     _line(border_parent, x1_sl, y1, x2_sl, y2, border_right_width)
                 else:
