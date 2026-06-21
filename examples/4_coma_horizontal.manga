@@ -1,0 +1,42 @@
+// 2x2 grid layout
+
+page {
+  size: 420x297
+  border: 0.5
+  direction: rtl
+
+  row height: 8% {
+    col { panel title1 }
+    col { panel title2 }
+    col { panel title3 }
+    col { panel title4 }
+  }
+
+  row height: 23%{
+    col { panel p11 }
+    col { panel p21 }
+    col { panel p31 }
+    col { panel p41 }
+  }
+
+  row height: 23%{
+    col { panel p12 }
+    col { panel p22 }
+    col { panel p32 }
+    col { panel p42 }
+  }
+
+  row height: 23%{
+    col { panel p13 }
+    col { panel p23 }
+    col { panel p33 }
+    col { panel p43 }
+  }
+
+  row height: 23%{
+    col { panel p14 }
+    col { panel p24 }
+    col { panel p34 }
+    col { panel p44 }
+  }
+}

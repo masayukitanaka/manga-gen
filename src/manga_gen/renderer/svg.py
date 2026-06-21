@@ -361,7 +361,8 @@ class SVGRenderer:
                     # Extend bottom to offset rect bottom: offset_bottom expands r.y+r.h
                     # beyond the layout rect, so the skewline must follow.
                     y2 = max(y2, r.y + r.h)
-                    _line(border_parent, sl.x_at(y1), y1, sl.x_at(y2), y2, border_left_width)
+                    x1_sl, x2_sl = sl.x_at(y1), sl.x_at(y2)
+                    _line(border_parent, x1_sl, y1, x2_sl, y2, border_left_width)
                 else:
                     # Draw to border_parent so slanted top/bottom endpoint trimming
                     # is not clipped by the panel's clipPath rect.
@@ -371,9 +372,12 @@ class SVGRenderer:
                 if panel.shared_right_skewline:
                     sl = panel.shared_right_skewline
                     y1, y2 = panel.shared_right_skewline_y if panel.shared_right_skewline_y else (r.y, r.y + r.h)
+                    # Clamp top to panel rect: don't draw above r.y (wedge gap prevention).
+                    y1 = max(y1, r.y)
                     # Extend bottom to offset rect bottom (same reason as left side).
                     y2 = max(y2, r.y + r.h)
-                    _line(border_parent, sl.x_at(y1), y1, sl.x_at(y2), y2, border_right_width)
+                    x1_sl, x2_sl = sl.x_at(y1), sl.x_at(y2)
+                    _line(border_parent, x1_sl, y1, x2_sl, y2, border_right_width)
                 else:
                     # Draw to border_parent so slanted top/bottom endpoint trimming
                     # is not clipped by the panel's clipPath rect.
@@ -396,12 +400,10 @@ class SVGRenderer:
                 else:
                     tx1, ty1, tx2, ty2 = tl_x, tl_y, tr_x, tr_y
                 if panel.shared_left_skewline:
-                    # Left corner: skewline X at this panel's own rect top.
                     tx1 = panel.shared_left_skewline.x_at(r.y)
                     ty1 = r.y
                 else:
                     # No skewline: use the endpoint Y from shared_top_endpoints (preserves slope).
-                    # For a flat gutter ty1==r.y already; for a slanted gutter this keeps the angle.
                     pass  # ty1 already set from shared_top_endpoints above
                 if panel.shared_right_skewline:
                     tx2 = panel.shared_right_skewline.x_at(r.y)
@@ -431,14 +433,10 @@ class SVGRenderer:
                     bx1 = panel.shared_left_skewline.x_at(by1_clamped)
                     by1 = by1_clamped
                 else:
-                    if panel.shared_bottom_endpoints and not panel.shared_right_skewline:
-                        # No vertical skewlines on either side: use shared_bottom_endpoints
-                        # directly so a slanted bottom gutter (skew_bottom/skew_top) is drawn
-                        # correctly. by1 is already set from shared_bottom_endpoints above.
+                    if panel.shared_bottom_endpoints:
+                        # No left skewline: use shared_bottom_endpoints directly so a
+                        # slanted bottom gutter (skew_bottom/skew_top) is drawn correctly.
                         pass  # by1 already correct from shared_bottom_endpoints
-                    elif panel.shared_bottom_skewline and panel.shared_right_skewline:
-                        # Slanted bottom + vertical skewline on opposite side: allow slope.
-                        by1 = max(by1, r.y + r.h)
                     else:
                         by1 = r.y + r.h
                 if panel.shared_right_skewline:
@@ -452,12 +450,8 @@ class SVGRenderer:
                     bx2 = panel.shared_right_skewline.x_at(by2_clamped)
                     by2 = by2_clamped
                 else:
-                    if panel.shared_bottom_endpoints and not panel.shared_left_skewline:
-                        # No vertical skewlines on either side: use shared_bottom_endpoints.
+                    if panel.shared_bottom_endpoints:
                         pass  # by2 already correct from shared_bottom_endpoints
-                    elif panel.shared_bottom_skewline and panel.shared_left_skewline:
-                        # Slanted bottom + vertical skewline on opposite side: allow slope.
-                        by2 = max(by2, r.y + r.h)
                     else:
                         by2 = r.y + r.h
                 _line(border_parent, bx1, by1, bx2, by2, border_bottom_width)

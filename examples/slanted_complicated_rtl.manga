@@ -3,25 +3,25 @@
 page {
   gutter: 6
   border: 0.5
+  direction: rtl
 
   row {
     col {
-      skew_right: -6
-      panel left1{}
+      skew_left: -6
+      panel pan1{}
     }
     col {
       row {
-        panel right1{
+        panel pan2{
           skew_bottom: 6
           offset_top: -20
         }
       }
       row {
-        panel right2{
+        panel pan3{
           offset_bottom: 10
         }
       }
     }
   }
 }
-
