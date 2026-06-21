@@ -358,9 +358,9 @@ class SVGRenderer:
                     y1, y2 = panel.shared_left_skewline_y if panel.shared_left_skewline_y else (r.y, r.y + r.h)
                     # Clamp top to panel rect: don't draw above r.y (wedge gap prevention).
                     y1 = max(y1, r.y)
-                    # Extend bottom to offset rect bottom: offset_bottom expands r.y+r.h
-                    # beyond the layout rect, so the skewline must follow.
-                    y2 = max(y2, r.y + r.h)
+                    # Bottom always ends at offset rect bottom (handles both positive
+                    # offset_bottom=shrink and negative=expand correctly).
+                    y2 = r.y + r.h
                     x1_sl, x2_sl = sl.x_at(y1), sl.x_at(y2)
                     _line(border_parent, x1_sl, y1, x2_sl, y2, border_left_width)
                 else:
@@ -374,8 +374,8 @@ class SVGRenderer:
                     y1, y2 = panel.shared_right_skewline_y if panel.shared_right_skewline_y else (r.y, r.y + r.h)
                     # Clamp top to panel rect: don't draw above r.y (wedge gap prevention).
                     y1 = max(y1, r.y)
-                    # Extend bottom to offset rect bottom (same reason as left side).
-                    y2 = max(y2, r.y + r.h)
+                    # Bottom always ends at offset rect bottom.
+                    y2 = r.y + r.h
                     x1_sl, x2_sl = sl.x_at(y1), sl.x_at(y2)
                     _line(border_parent, x1_sl, y1, x2_sl, y2, border_right_width)
                 else:

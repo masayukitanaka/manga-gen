@@ -19,7 +19,7 @@ page {
       }
       row {
         panel pan3{
-          offset_bottom: 10
+          offset_bottom: -20
         }
       }
     }

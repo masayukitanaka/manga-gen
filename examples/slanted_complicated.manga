@@ -18,7 +18,7 @@ page {
       }
       row {
         panel right2{
-          offset_bottom: 10
+          offset_bottom: -20
         }
       }
     }
